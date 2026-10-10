@@ -13,10 +13,18 @@ export function MemberRatings({ ratings }: { ratings: MemberRating[] }) {
           <th scope="col" className="text-left font-semibold">
             <span className="sr-only">Membre</span>
           </th>
-          <th scope="col" className="w-10 font-semibold">Hum.</th>
-          <th scope="col" className="w-10 font-semibold">Scén.</th>
-          <th scope="col" className="w-11 font-semibold">Bonus</th>
-          <th scope="col" className="w-10 text-right font-semibold">Moy.</th>
+          <th scope="col" className="w-10 font-semibold">
+            <abbr title="Humour">Hum.</abbr>
+          </th>
+          <th scope="col" className="w-10 font-semibold">
+            <abbr title="Scénario">Scén.</abbr>
+          </th>
+          <th scope="col" className="w-11 font-semibold">
+            <abbr title="Jeu d'acteur, bonus">Bonus</abbr>
+          </th>
+          <th scope="col" className="w-10 text-right font-semibold">
+            <abbr title="Moyenne">Moy.</abbr>
+          </th>
         </tr>
       </thead>
       <tbody>

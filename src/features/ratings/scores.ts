@@ -37,6 +37,22 @@ export function summarize(ratings: Scores[]): ScoreSummary {
   };
 }
 
+export type MovieSort = "worst" | "recent" | "best";
+
+/**
+ * Orders watched films (given most recent first). Unrated films always come
+ * last; ties keep the most recent first (stable sort).
+ */
+export function sortByScore<T extends { summary: { average: number | null } }>(movies: T[], sort: MovieSort): T[] {
+  if (sort === "recent") return movies;
+  const direction = sort === "worst" ? 1 : -1;
+  const rated = movies.flatMap((movie) =>
+    movie.summary.average === null ? [] : [{ movie, average: movie.summary.average }],
+  );
+  rated.sort((a, b) => direction * (a.average - b.average));
+  return [...rated.map((entry) => entry.movie), ...movies.filter((movie) => movie.summary.average === null)];
+}
+
 /** "Une daube de compétition", "Étonnamment regardable"… for a 0–10 average. */
 export function verdict(average: number): string {
   if (average >= 7) return "Attends… c'était bien ?";

@@ -86,9 +86,10 @@ export function RatingForm({ roomId, movieId, initial }: RatingFormProps) {
 
   return (
     <form action={formAction} className="flex flex-col gap-3.5">
-      <section aria-live="polite" className="flex items-center gap-2 rounded-[22px] bg-accent-soft py-3.5 pr-4 pl-2.5">
+      <section className="flex items-center gap-2 rounded-[22px] bg-accent-soft py-3.5 pr-4 pl-2.5">
         <Tomy mood={moodFor(average)} size={84} />
-        <div className="flex flex-col gap-0.5">
+        {/* Only the result is announced; sliders already speak their own value. */}
+        <div aria-live="polite" aria-atomic="true" className="flex flex-col gap-0.5">
           <span className="text-xs font-semibold text-muted">Ta moyenne</span>
           <span className="leading-none font-extrabold tracking-tight">
             <span className="text-[44px] text-accent">{formatScore(average)}</span>
@@ -113,6 +114,7 @@ export function RatingForm({ roomId, movieId, initial }: RatingFormProps) {
             type="checkbox"
             checked={actingEnabled}
             onChange={(event) => setActingEnabled(event.target.checked)}
+            aria-describedby="acting-hint"
             className="size-5 accent-accent"
           />
           Jeu d&apos;acteur
@@ -123,7 +125,9 @@ export function RatingForm({ roomId, movieId, initial }: RatingFormProps) {
             <ScoreSlider id="acting" name="acting" label="Note du jeu d'acteur" value={acting} onChange={setActing} low="Bois brut" high="César mérité" muted />
           </div>
         )}
-        <span className="mt-1 text-xs text-muted">Facultatif, ne compte pas dans la moyenne.</span>
+        <span id="acting-hint" className="mt-1 text-xs text-muted">
+          Facultatif, ne compte pas dans la moyenne.
+        </span>
       </section>
 
       {state.error && <FormAlert tone="error">{state.error}</FormAlert>}

@@ -1,5 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { personalAverage, summarize, verdict } from "./scores";
+import { personalAverage, sortByScore, summarize, verdict } from "./scores";
+
+describe("sortByScore", () => {
+  // Given newest first, as the watched list comes.
+  const movies = [
+    { title: "Pas noté", summary: { average: null } },
+    { title: "Récent à 3", summary: { average: 3 } },
+    { title: "Pire", summary: { average: 1.5 } },
+    { title: "Ancien à 3", summary: { average: 3 } },
+    { title: "Meilleur", summary: { average: 6 } },
+  ];
+  const titles = (sorted: typeof movies) => sorted.map((movie) => movie.title);
+
+  it("puts the worst first, unrated last, ties newest first", () => {
+    expect(titles(sortByScore(movies, "worst"))).toEqual(["Pire", "Récent à 3", "Ancien à 3", "Meilleur", "Pas noté"]);
+  });
+
+  it("puts the best first, still with unrated films last", () => {
+    expect(titles(sortByScore(movies, "best"))).toEqual(["Meilleur", "Récent à 3", "Ancien à 3", "Pire", "Pas noté"]);
+  });
+
+  it("keeps the watch order for recent", () => {
+    expect(titles(sortByScore(movies, "recent"))).toEqual(titles(movies));
+  });
+});
 
 describe("personalAverage", () => {
   it("weights humour and scenario equally", () => {

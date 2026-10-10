@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-const score = z.coerce.number().int().min(0, "Entre 0 et 10.").max(10, "Entre 0 et 10.");
+// Digits only before converting: z.coerce alone turns "" into 0 (a real
+// score here) and accepts "1e3" or " 42".
+const digits = (message: string) => z.string().trim().regex(/^\d+$/, message);
+
+const score = digits("Entre 0 et 10.")
+  .transform(Number)
+  .pipe(z.number().int().min(0, "Entre 0 et 10.").max(10, "Entre 0 et 10."));
 
 /** Form fields: the acting bonus only counts when its checkbox is ticked. */
 export const ratingFormSchema = z
@@ -16,4 +22,9 @@ export const ratingFormSchema = z
     acting: actingEnabled === "on" ? (acting ?? null) : null,
   }));
 
-export const movieIdSchema = z.coerce.number().int().positive();
+/** TMDB ids in URLs: canonical positive integers only. */
+export const movieIdSchema = z
+  .string()
+  .regex(/^[1-9]\d*$/)
+  .transform(Number)
+  .pipe(z.number().int().positive());

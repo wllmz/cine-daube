@@ -64,15 +64,22 @@ export async function listWatchedMovies(db: Database, roomId: string, userId: st
   });
 }
 
-/** Room-level numbers for the "Films vus" header, from the watched list. */
+/**
+ * Room-level numbers for the "Films vus" header, from the watched list
+ * (most recent first).
+ * - Room average: mean of the films' averages, each rated film weighs the same.
+ * - Acting bonus: mean of every bonus given, each bonus weighs the same.
+ * - Navet d'Or: lowest film average; on a tie, the most recently watched.
+ */
 export function computeRoomStats(watched: WatchedMovie[]): RoomStats {
-  const rated = watched.filter((movie) => movie.summary.average !== null);
-  const averages = rated.map((movie) => movie.summary.average ?? 0);
-  const navet = rated.reduce<WatchedMovie | null>(
-    (worst, movie) => (worst === null || (movie.summary.average ?? 0) < (worst.summary.average ?? 0) ? movie : worst),
+  const rated = watched.flatMap((movie) =>
+    movie.summary.average === null ? [] : [{ movie, average: movie.summary.average }],
+  );
+  const worst = rated.reduce<(typeof rated)[number] | null>(
+    (current, entry) => (current === null || entry.average < current.average ? entry : current),
     null,
   );
-  // Weighted by number of bonuses given, film by film.
+
   let actingSum = 0;
   let actingCount = 0;
   for (const movie of watched) {
@@ -84,9 +91,9 @@ export function computeRoomStats(watched: WatchedMovie[]): RoomStats {
 
   return {
     watchedCount: watched.length,
-    roomAverage: averages.length > 0 ? averages.reduce((sum, value) => sum + value, 0) / averages.length : null,
+    roomAverage: rated.length > 0 ? rated.reduce((sum, entry) => sum + entry.average, 0) / rated.length : null,
     actingAverage: actingCount > 0 ? actingSum / actingCount : null,
-    navet,
+    navet: worst?.movie ?? null,
   };
 }
 

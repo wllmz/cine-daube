@@ -4,29 +4,18 @@ import { Suspense } from "react";
 import { BackLink } from "@/components/ui/back-link";
 import { Tomy } from "@/components/ui/tomy";
 import { requireRoomMember } from "@/features/rooms/server";
-import { MovieRow, RoomTabs, type WatchedMovie } from "@/features/ratings";
+import { MovieRow, RoomTabs, sortByScore, type MovieSort } from "@/features/ratings";
 import { getWatchedMovies } from "@/features/ratings/server";
 import { formatScore } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Films vus · Ciné Daube" };
 
-const SORTS = [
+const SORTS: { key: MovieSort; label: string }[] = [
   { key: "worst", label: "Pires d'abord" },
   { key: "recent", label: "Récents" },
   { key: "best", label: "Meilleurs" },
-] as const;
-type SortKey = (typeof SORTS)[number]["key"];
-
-function sortMovies(movies: WatchedMovie[], sort: SortKey): WatchedMovie[] {
-  if (sort === "recent") return movies;
-  // Unrated films go last whatever the direction.
-  const rated = movies.filter((movie) => movie.summary.average !== null);
-  const unrated = movies.filter((movie) => movie.summary.average === null);
-  const direction = sort === "worst" ? 1 : -1;
-  rated.sort((a, b) => direction * ((a.summary.average ?? 0) - (b.summary.average ?? 0)));
-  return [...rated, ...unrated];
-}
+];
 
 function Stat({ value, label, dashed = false }: { value: string; label: string; dashed?: boolean }) {
   return (
@@ -45,9 +34,9 @@ async function Movies({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const [{ roomId }, query] = await Promise.all([params, searchParams]);
-  const sort: SortKey = SORTS.find((s) => s.key === query.sort)?.key ?? "worst";
+  const sort: MovieSort = SORTS.find((s) => s.key === query.sort)?.key ?? "worst";
   const [room, { movies, stats }] = await Promise.all([requireRoomMember(roomId), getWatchedMovies(roomId)]);
-  const sorted = sortMovies(movies, sort);
+  const sorted = sortByScore(movies, sort);
 
   return (
     <>

@@ -36,7 +36,19 @@ export function MovieRow({ roomId, movie, rank }: { roomId: string; movie: Watch
           />
         </span>
       </span>
-      <span className="min-w-9 text-right text-lg font-extrabold">{average === null ? "—" : formatScore(average)}</span>
+      <span className="min-w-9 text-right text-lg font-extrabold">
+        {average === null ? (
+          <>
+            <span aria-hidden="true">—</span>
+            <span className="sr-only">pas encore noté</span>
+          </>
+        ) : (
+          <>
+            <span className="sr-only">moyenne </span>
+            {formatScore(average)}
+          </>
+        )}
+      </span>
     </Link>
   );
 }

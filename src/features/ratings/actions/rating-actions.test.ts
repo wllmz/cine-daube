@@ -59,13 +59,27 @@ describe("rateMovieAction", () => {
   });
 
   it.each([
-    ["a score above 10", { humour: "11", scenario: "2" }, "42"],
-    ["a missing score", { humour: "3" }, "42"],
-    ["a decimal score", { humour: "3.5", scenario: "2" }, "42"],
-    ["a malformed film id", { humour: "3", scenario: "2" }, "abc"],
-  ])("rejects %s", async (_label, fields, movieId) => {
-    expect((await rateMovieAction(ROOM_ID, movieId, {}, form(fields))).error).toBe("Les notes vont de 0 à 10.");
+    ["a score above 10", { humour: "11", scenario: "2" }],
+    ["a missing score", { humour: "3" }],
+    ["an empty score (not a zero)", { humour: "", scenario: "2" }],
+    ["an empty bonus when ticked", { humour: "3", scenario: "2", actingEnabled: "on", acting: "" }],
+    ["a decimal score", { humour: "3.5", scenario: "2" }],
+    ["an exponent", { humour: "1e1", scenario: "2" }],
+  ])("rejects %s", async (_label, fields) => {
+    expect((await rateMovieAction(ROOM_ID, "42", {}, form(fields))).error).toBe("Les notes vont de 0 à 10.");
     expect(saveRating).not.toHaveBeenCalled();
+  });
+
+  it.each(["abc", "1e3", " 42", "042", "0"])("rejects the film id %j", async (movieId) => {
+    expect((await rateMovieAction(ROOM_ID, movieId, {}, form({ humour: "3", scenario: "2" }))).error).toBe(
+      "Film introuvable.",
+    );
+    expect(saveRating).not.toHaveBeenCalled();
+  });
+
+  it("accepts a real zero", async () => {
+    await redirectPathOf(rateMovieAction(ROOM_ID, "42", {}, form({ humour: "0", scenario: "0" })));
+    expect(saveRating.mock.calls[0]?.[1].scores).toEqual({ humour: 0, scenario: 0, acting: null });
   });
 
   it("explains a film the room did not watch", async () => {

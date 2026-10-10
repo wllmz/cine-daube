@@ -27,9 +27,8 @@ export async function rateMovieAction(
     actingEnabled: formValue(formData, "actingEnabled"),
     acting: formValue(formData, "acting"),
   });
-  if (!parsedMovie.success || !scores.success) {
-    return { error: "Les notes vont de 0 à 10." };
-  }
+  if (!parsedMovie.success) return { error: "Film introuvable." };
+  if (!scores.success) return { error: "Les notes vont de 0 à 10." };
 
   try {
     await saveRating(getDb(), { roomId: room.id, movieId: parsedMovie.data, userId: user.id, scores: scores.data });
