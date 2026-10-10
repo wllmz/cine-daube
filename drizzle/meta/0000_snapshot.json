@@ -1,5 +1,5 @@
 {
-  "id": "4f77dda3-b7ea-4bb4-88e6-2cf7523feeaf",
+  "id": "595d3970-735d-4554-9b20-119a154df87e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -188,7 +188,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "profiles_pseudo_length": {
+          "name": "profiles_pseudo_length",
+          "value": "char_length(\"profiles\".\"pseudo\") between 1 and 30"
+        }
+      },
       "isRLSEnabled": true
     },
     "public.ratings": {
@@ -212,6 +217,14 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "movie_status": {
+          "name": "movie_status",
+          "type": "room_movie_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'watched'"
         },
         "humour": {
           "name": "humour",
@@ -246,32 +259,58 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "ratings_member_idx": {
+          "name": "ratings_member_idx",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
-        "ratings_user_id_profiles_id_fk": {
-          "name": "ratings_user_id_profiles_id_fk",
-          "tableFrom": "ratings",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "ratings_room_id_movie_id_room_movies_room_id_movie_id_fk": {
-          "name": "ratings_room_id_movie_id_room_movies_room_id_movie_id_fk",
+        "ratings_room_movie_fk": {
+          "name": "ratings_room_movie_fk",
           "tableFrom": "ratings",
           "tableTo": "room_movies",
           "columnsFrom": [
             "room_id",
-            "movie_id"
+            "movie_id",
+            "movie_status"
           ],
           "columnsTo": [
             "room_id",
-            "movie_id"
+            "movie_id",
+            "status"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ratings_member_fk": {
+          "name": "ratings_member_fk",
+          "tableFrom": "ratings",
+          "tableTo": "room_members",
+          "columnsFrom": [
+            "room_id",
+            "user_id"
+          ],
+          "columnsTo": [
+            "room_id",
+            "user_id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -290,6 +329,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "ratings_movie_watched": {
+          "name": "ratings_movie_watched",
+          "value": "\"ratings\".\"movie_status\" = 'watched'"
+        },
         "ratings_humour_range": {
           "name": "ratings_humour_range",
           "value": "\"ratings\".\"humour\" between 0 and 10"
@@ -433,7 +476,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "room_movies_spin_idx": {
+          "name": "room_movies_spin_idx",
+          "columns": [
+            {
+              "expression": "spin_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "room_movies_room_id_rooms_id_fk": {
           "name": "room_movies_room_id_rooms_id_fk",
@@ -461,17 +520,21 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "room_movies_spin_id_spins_id_fk": {
-          "name": "room_movies_spin_id_spins_id_fk",
+        "room_movies_spin_fk": {
+          "name": "room_movies_spin_fk",
           "tableFrom": "room_movies",
           "tableTo": "spins",
           "columnsFrom": [
-            "spin_id"
+            "spin_id",
+            "room_id",
+            "movie_id"
           ],
           "columnsTo": [
-            "id"
+            "id",
+            "room_id",
+            "movie_id"
           ],
-          "onDelete": "set null",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -484,7 +547,17 @@
           ]
         }
       },
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "room_movies_room_movie_status_unique": {
+          "name": "room_movies_room_movie_status_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "room_id",
+            "movie_id",
+            "status"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": true
@@ -503,12 +576,6 @@
         "name": {
           "name": "name",
           "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "owner_id": {
-          "name": "owner_id",
-          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -533,21 +600,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "rooms_owner_id_profiles_id_fk": {
-          "name": "rooms_owner_id_profiles_id_fk",
-          "tableFrom": "rooms",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "owner_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "rooms_invite_code_unique": {
@@ -559,7 +612,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "rooms_name_length": {
+          "name": "rooms_name_length",
+          "value": "char_length(\"rooms\".\"name\") between 1 and 50"
+        }
+      },
       "isRLSEnabled": true
     },
     "public.spin_votes": {
@@ -568,6 +626,12 @@
       "columns": {
         "spin_id": {
           "name": "spin_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "room_id": {
+          "name": "room_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -592,30 +656,56 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "spin_votes_member_idx": {
+          "name": "spin_votes_member_idx",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
-        "spin_votes_spin_id_spins_id_fk": {
-          "name": "spin_votes_spin_id_spins_id_fk",
+        "spin_votes_spin_fk": {
+          "name": "spin_votes_spin_fk",
           "tableFrom": "spin_votes",
           "tableTo": "spins",
           "columnsFrom": [
-            "spin_id"
+            "spin_id",
+            "room_id"
           ],
           "columnsTo": [
-            "id"
+            "id",
+            "room_id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "spin_votes_user_id_profiles_id_fk": {
-          "name": "spin_votes_user_id_profiles_id_fk",
+        "spin_votes_member_fk": {
+          "name": "spin_votes_member_fk",
           "tableFrom": "spin_votes",
-          "tableTo": "profiles",
+          "tableTo": "room_members",
           "columnsFrom": [
+            "room_id",
             "user_id"
           ],
           "columnsTo": [
-            "id"
+            "room_id",
+            "user_id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -632,7 +722,12 @@
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "spin_votes_voted_at_set": {
+          "name": "spin_votes_voted_at_set",
+          "value": "(\"spin_votes\".\"vote\" is null) = (\"spin_votes\".\"voted_at\" is null)"
+        }
+      },
       "isRLSEnabled": true
     },
     "public.spins": {
@@ -662,7 +757,7 @@
           "name": "launched_by",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "status": {
           "name": "status",
@@ -762,14 +857,37 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "spins_id_room_unique": {
+          "name": "spins_id_room_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "room_id"
+          ]
+        },
+        "spins_id_room_movie_unique": {
+          "name": "spins_id_room_movie_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "room_id",
+            "movie_id"
+          ]
+        }
+      },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "spins_resolved_when_not_voting": {
+          "name": "spins_resolved_when_not_voting",
+          "value": "(\"spins\".\"status\" = 'voting') = (\"spins\".\"resolved_at\" is null)"
+        }
+      },
       "isRLSEnabled": true
     }
   },

@@ -9,8 +9,13 @@ export type Database = PostgresJsDatabase<typeof schema>;
 const globalForDb = globalThis as unknown as { db?: Database };
 
 function createDb(): Database {
-  // Supabase transaction pooler does not support prepared statements.
-  const client = postgres(getServerEnv().DATABASE_URL, { prepare: false });
+  const client = postgres(getServerEnv().DATABASE_URL, {
+    // Supabase transaction pooler does not support prepared statements.
+    prepare: false,
+    // Serverless instances multiply: keep each pool small, the pooler does the rest.
+    max: 3,
+    idle_timeout: 20,
+  });
   return drizzle(client, { schema });
 }
 

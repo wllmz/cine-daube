@@ -29,7 +29,7 @@ npm run dev
 | `DATABASE_URL` | Supabase › Connect › Transaction pooler (port 6543) | Requêtes Drizzle au runtime |
 | `DATABASE_DIRECT_URL` | Supabase › Connect › Session pooler (port 5432) | Migrations `drizzle-kit` |
 
-Les variables sont validées avec Zod dans `src/config/`.
+Les variables de l'app sont validées avec Zod dans `src/config/`, `DATABASE_DIRECT_URL` dans `drizzle.config.ts`.
 
 ### Base de données
 
@@ -40,6 +40,8 @@ npm run db:studio     # explorer la base
 ```
 
 Toutes les tables ont la RLS activée sans policy : seule l'app (via Drizzle, côté serveur) y accède, la clé publique Supabase ne peut ni lire ni écrire.
+
+Les règles métier critiques sont garanties par la base (clés étrangères composites et checks) : un seul vote en cours par room, seuls les membres votent et notent, notes entre 0 et 10, impossible de noter un film « déjà vu », supprimer un compte ne détruit pas l'historique de la room. Elles sont couvertes par `tests/integration/schema.test.ts`, qui applique les migrations sur un Postgres en mémoire (PGlite).
 
 ## Scripts
 
