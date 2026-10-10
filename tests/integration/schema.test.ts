@@ -1,10 +1,7 @@
 // @vitest-environment node
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
-
-const MIGRATIONS_DIR = join(process.cwd(), "drizzle");
+import { createTestPglite } from "../helpers/test-database";
 
 const U1 = "00000000-0000-0000-0000-000000000001";
 const U2 = "00000000-0000-0000-0000-000000000002";
@@ -14,18 +11,7 @@ const R2 = "10000000-0000-0000-0000-000000000002";
 const S1 = "20000000-0000-0000-0000-000000000001";
 
 async function createDatabase(): Promise<PGlite> {
-  const db = new PGlite();
-  // Minimal stand-in for Supabase's auth schema and API roles.
-  await db.exec(`
-    create role anon; create role authenticated;
-    create schema auth;
-    create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb);
-  `);
-  const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort();
-  for (const file of files) {
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
-    await db.exec(sql.replaceAll("--> statement-breakpoint", ""));
-  }
+  const db = await createTestPglite();
   await db.exec(`
     insert into auth.users (id, email, raw_user_meta_data) values
       ('${U1}', 'will@example.com', '{"pseudo": "Will"}'),

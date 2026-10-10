@@ -68,6 +68,8 @@ export async function signUp(_state: AuthFormState, formData: FormData): Promise
   }
 
   const { email, password, pseudo } = parsed.data;
+  // Where to land once signed in, e.g. the invite link that brought them here.
+  const next = safeNextPath(formData.get("next"));
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -75,7 +77,7 @@ export async function signUp(_state: AuthFormState, formData: FormData): Promise
     options: {
       // Read by the on_auth_user_created trigger to create the profile.
       data: { pseudo },
-      emailRedirectTo: emailCallbackUrl(AFTER_SIGN_IN_PATH),
+      emailRedirectTo: emailCallbackUrl(next),
     },
   });
   if (error) {
@@ -84,7 +86,7 @@ export async function signUp(_state: AuthFormState, formData: FormData): Promise
 
   // Email confirmation disabled: the user is signed in right away.
   if (data.session) {
-    redirect(AFTER_SIGN_IN_PATH);
+    redirect(next);
   }
 
   return {

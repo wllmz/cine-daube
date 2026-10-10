@@ -103,6 +103,22 @@ describe("signUp", () => {
     expect(state.success).toContain("will@example.fr");
   });
 
+  it("keeps the invite link through signup, for both email and immediate sessions", async () => {
+    auth.signUp.mockResolvedValue({ data: { session: null }, error: null });
+    await signUp({}, form({ ...valid, next: "/join/7K2QXM" }));
+    expect(auth.signUp.mock.calls[0]?.[0].options.emailRedirectTo).toBe(
+      "https://cinedaube.test/auth/callback?next=%2Fjoin%2F7K2QXM",
+    );
+
+    auth.signUp.mockResolvedValue({ data: { session: { access_token: "t" } }, error: null });
+    expect(await redirectPathOf(signUp({}, form({ ...valid, next: "/join/7K2QXM" })))).toBe("/join/7K2QXM");
+  });
+
+  it("ignores an external `next` at signup", async () => {
+    auth.signUp.mockResolvedValue({ data: { session: { access_token: "t" } }, error: null });
+    expect(await redirectPathOf(signUp({}, form({ ...valid, next: "/\t/evil.example" })))).toBe("/rooms");
+  });
+
   it("goes straight to the rooms when email confirmation is off", async () => {
     auth.signUp.mockResolvedValue({ data: { session: { access_token: "t" } }, error: null });
     expect(await redirectPathOf(signUp({}, form(valid)))).toBe("/rooms");

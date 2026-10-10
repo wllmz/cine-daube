@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { FormAlert } from "@/components/ui/form-alert";
@@ -11,6 +12,7 @@ import { PASSWORD_MIN_LENGTH, PSEUDO_MAX_LENGTH } from "../schemas";
 import type { AuthFormState } from "../types";
 
 export function SignupForm() {
+  const next = useSearchParams().get("next") ?? "";
   const [state, formAction, pending] = useActionState<AuthFormState, FormData>(signUp, {});
   const formRef = useFocusFirstInvalid(state.fieldErrors);
 
@@ -27,6 +29,7 @@ export function SignupForm() {
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-3.5" noValidate>
+      <input type="hidden" name="next" value={next} />
       {state.error && <FormAlert tone="error">{state.error}</FormAlert>}
       <TextField
         label="Pseudo"

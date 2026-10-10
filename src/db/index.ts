@@ -1,10 +1,12 @@
 import "server-only";
-import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { getServerEnv } from "@/config/env";
 import * as schema from "./schema";
 
-export type Database = PostgresJsDatabase<typeof schema>;
+/** Driver-agnostic handle, so services can run on PGlite in tests. */
+export type Database = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 const globalForDb = globalThis as unknown as { db?: Database };
 

@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -6,7 +9,10 @@ const TABS = [
   { href: "/signup", label: "Inscription" },
 ] as const;
 
+/** Keeps `?next=` when switching tabs, so an invite link survives signup. */
 export function AuthTabs({ active }: { active: "/login" | "/signup" }) {
+  const next = useSearchParams().get("next");
+
   return (
     <nav aria-label="Connexion ou inscription" className="grid grid-cols-2 gap-1 rounded-xl bg-chip p-1">
       {TABS.map((tab) => {
@@ -14,7 +20,7 @@ export function AuthTabs({ active }: { active: "/login" | "/signup" }) {
         return (
           <Link
             key={tab.href}
-            href={tab.href}
+            href={next ? { pathname: tab.href, query: { next } } : tab.href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
               "flex h-[42px] items-center justify-center rounded-[9px] text-sm font-semibold transition",
