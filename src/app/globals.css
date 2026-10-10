@@ -23,6 +23,27 @@
   --shadow-accent: 0 8px 20px rgb(207 62 42 / 0.25);
 
   --animate-fade-up: fade-up 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-wheel-spin: wheel-spin 2.4s cubic-bezier(0.12, 0.72, 0.1, 1) forwards;
+  --animate-tick: tick 0.12s linear infinite;
+
+  @keyframes wheel-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(1530deg);
+    }
+  }
+
+  @keyframes tick {
+    0%,
+    100% {
+      transform: translateX(-50%) rotate(0deg);
+    }
+    50% {
+      transform: translateX(-50%) rotate(-12deg);
+    }
+  }
 
   @keyframes fade-up {
     from {
