@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getPublicEnv } from "@/config/public-env";
 
 const GUEST_ONLY_PATHS = ["/login", "/signup", "/forgot-password"];
-const PUBLIC_PATHS = [...GUEST_ONLY_PATHS, "/auth/confirm"];
+const PUBLIC_PATHS = [...GUEST_ONLY_PATHS, "/auth/callback"];
 
 /**
  * Refreshes the Supabase session on every request and does optimistic

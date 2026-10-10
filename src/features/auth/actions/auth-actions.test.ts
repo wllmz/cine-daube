@@ -12,6 +12,9 @@ const auth = {
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({ auth }),
 }));
+vi.mock("@/config/env", () => ({
+  getServerEnv: () => ({ DATABASE_URL: "postgres://unused", SITE_URL: "https://cinedaube.test" }),
+}));
 vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
     throw new RedirectSignal(path);
@@ -87,7 +90,10 @@ describe("signUp", () => {
     expect(auth.signUp).toHaveBeenCalledWith({
       email: "will@example.fr",
       password: "nanar1234",
-      options: { data: { pseudo: "Will" } },
+      options: {
+        data: { pseudo: "Will" },
+        emailRedirectTo: "https://cinedaube.test/auth/callback?next=%2Frooms",
+      },
     });
   });
 
@@ -116,7 +122,9 @@ describe("requestPasswordReset", () => {
     const state = await requestPasswordReset({}, form({ email: "ghost@example.fr" }));
     expect(state.error).toBeUndefined();
     expect(state.success).toContain("Si un compte existe");
-    expect(auth.resetPasswordForEmail).toHaveBeenCalledWith("ghost@example.fr");
+    expect(auth.resetPasswordForEmail).toHaveBeenCalledWith("ghost@example.fr", {
+      redirectTo: "https://cinedaube.test/auth/callback?next=%2Freset-password",
+    });
   });
 
   it("surfaces rate limits", async () => {

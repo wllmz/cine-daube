@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getServerEnv } from "@/config/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { authErrorMessage } from "../errors";
 import { AFTER_SIGN_IN_PATH, SIGN_IN_PATH, safeNextPath } from "../redirect";
@@ -30,9 +31,18 @@ function readText(formData: FormData, field: string): string {
   return typeof value === "string" ? value : "";
 }
 
-// Email links are built by the Supabase email templates from the project's
-// Site URL ({{ .SiteURL }}/auth/confirm?token_hash=...), never from request
-// headers, so a forged Host header cannot redirect them.
+/**
+ * Where Supabase sends the user back after an email link. Built from the
+ * configured SITE_URL, never from request headers, so a forged Host header
+ * cannot redirect the link elsewhere. Must match the project's Redirect URLs.
+ */
+function emailCallbackUrl(next: string): string {
+  const url = new URL("/auth/callback", getServerEnv().SITE_URL);
+  url.searchParams.set("next", next);
+  return url.toString();
+}
+
+const SAME_BROWSER_HINT = "Ouvre-le sur cet appareil, dans ce navigateur.";
 
 export async function signIn(_state: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const email = readText(formData, "email");
@@ -62,8 +72,11 @@ export async function signUp(_state: AuthFormState, formData: FormData): Promise
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    // Read by the on_auth_user_created trigger to create the profile.
-    options: { data: { pseudo } },
+    options: {
+      // Read by the on_auth_user_created trigger to create the profile.
+      data: { pseudo },
+      emailRedirectTo: emailCallbackUrl(AFTER_SIGN_IN_PATH),
+    },
   });
   if (error) {
     return { error: authErrorMessage(error), values };
@@ -75,7 +88,7 @@ export async function signUp(_state: AuthFormState, formData: FormData): Promise
   }
 
   return {
-    success: `C'est presque bon ! Clique sur le lien envoyé à ${email} pour activer ton compte.`,
+    success: `C'est presque bon ! Clique sur le lien envoyé à ${email} pour activer ton compte. ${SAME_BROWSER_HINT}`,
   };
 }
 
@@ -90,14 +103,16 @@ export async function requestPasswordReset(
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email);
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: emailCallbackUrl("/reset-password"),
+  });
   // Only rate limits are surfaced: the answer must not reveal whether an account exists.
   if (error?.code === "over_email_send_rate_limit" || error?.code === "over_request_rate_limit") {
     return { error: authErrorMessage(error), values: { email } };
   }
 
   return {
-    success: `Si un compte existe pour ${parsed.data.email}, un lien pour changer ton mot de passe vient de partir.`,
+    success: `Si un compte existe pour ${parsed.data.email}, un lien pour changer ton mot de passe vient de partir. ${SAME_BROWSER_HINT}`,
   };
 }
 

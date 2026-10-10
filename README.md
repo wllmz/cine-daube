@@ -28,6 +28,12 @@ npm run dev
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase › Project Settings › API Keys | Client Supabase |
 | `DATABASE_URL` | Supabase › Connect › Transaction pooler (port 6543) | Requêtes Drizzle au runtime |
 | `DATABASE_DIRECT_URL` | Supabase › Connect › Session pooler (port 5432) | Migrations `drizzle-kit` |
+| `SITE_URL` | URL publique de l'app (`http://localhost:3000` en dev) | Liens envoyés par email |
+
+### Auth Supabase
+
+- Authentication › URL Configuration : **Site URL** = `SITE_URL`, et **Redirect URLs** contient `<SITE_URL>/auth/callback**`.
+- Les emails utilisent les templates par défaut (flux PKCE) : le lien doit être ouvert dans le navigateur qui a fait la demande. Les templates ne sont modifiables qu'avec un SMTP personnalisé, qui est aussi nécessaire pour envoyer des emails à d'autres adresses que celles de l'organisation Supabase.
 
 Les variables de l'app sont validées avec Zod dans `src/config/`, `DATABASE_DIRECT_URL` dans `drizzle.config.ts`.
 

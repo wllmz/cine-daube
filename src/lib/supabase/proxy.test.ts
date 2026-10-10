@@ -67,7 +67,7 @@ describe("updateSession", () => {
 
   it("keeps guests on public pages and signed-in users away from them", async () => {
     expect((await updateSession(request("/signup"))).headers.get("location")).toBeNull();
-    expect((await updateSession(request("/auth/confirm"))).headers.get("location")).toBeNull();
+    expect((await updateSession(request("/auth/callback?code=abc"))).headers.get("location")).toBeNull();
     session.signedIn = true;
     expect((await updateSession(request("/login"))).headers.get("location")).toBe(
       "http://localhost:3000/rooms",

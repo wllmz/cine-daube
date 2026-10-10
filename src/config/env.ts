@@ -3,6 +3,8 @@ import { z } from "zod";
 
 const serverEnvSchema = z.object({
   DATABASE_URL: z.url(),
+  /** Public URL of the app, used to build links sent by email. */
+  SITE_URL: z.url(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
