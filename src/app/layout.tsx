@@ -18,7 +18,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="fr" className={`${jakarta.variable} h-full antialiased`}>
+    // Browser extensions add attributes to <html> before hydration; only this element is exempted.
+    <html lang="fr" className={`${jakarta.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col font-sans">{children}</body>
     </html>
   );

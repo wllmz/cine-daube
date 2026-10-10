@@ -15,16 +15,22 @@ const S1 = "20000000-0000-0000-0000-000000000001";
 
 async function createDatabase(): Promise<PGlite> {
   const db = new PGlite();
-  // Minimal stand-in for Supabase's auth schema.
-  await db.exec("create schema auth; create table auth.users (id uuid primary key);");
+  // Minimal stand-in for Supabase's auth schema and API roles.
+  await db.exec(`
+    create role anon; create role authenticated;
+    create schema auth;
+    create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb);
+  `);
   const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort();
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
     await db.exec(sql.replaceAll("--> statement-breakpoint", ""));
   }
   await db.exec(`
-    insert into auth.users values ('${U1}'), ('${U2}'), ('${OUTSIDER}');
-    insert into profiles (id, pseudo) values ('${U1}', 'Will'), ('${U2}', 'Sarah'), ('${OUTSIDER}', 'Intrus');
+    insert into auth.users (id, email, raw_user_meta_data) values
+      ('${U1}', 'will@example.com', '{"pseudo": "Will"}'),
+      ('${U2}', 'sarah@example.com', '{"pseudo": "Sarah"}'),
+      ('${OUTSIDER}', 'intrus@example.com', '{"pseudo": "Intrus"}');
     insert into rooms (id, name, invite_code, invite_expires_at) values
       ('${R1}', 'Les Nanardeurs', 'AAA', now() + interval '7 days'),
       ('${R2}', 'Autre', 'BBB', now() + interval '7 days');
@@ -181,10 +187,43 @@ describe("database schema", () => {
     });
   });
 
-  it("rejects an empty pseudo", async () => {
-    await db.exec(`insert into auth.users values ('30000000-0000-0000-0000-000000000001')`);
-    await expect(
-      db.exec(`insert into profiles (id, pseudo) values ('30000000-0000-0000-0000-000000000001', '')`),
-    ).rejects.toThrow(/profiles_pseudo_length/);
+  describe("profiles", () => {
+    const NEW_USER = "30000000-0000-0000-0000-000000000001";
+
+    async function pseudoOf(id: string): Promise<string | undefined> {
+      const result = await db.query<{ pseudo: string }>(
+        `select pseudo from profiles where id = '${id}'`,
+      );
+      return result.rows[0]?.pseudo;
+    }
+
+    it("creates the profile with the signup pseudo", async () => {
+      expect(await pseudoOf(U1)).toBe("Will");
+    });
+
+    it("strips control characters and truncates to 30 characters", async () => {
+      await db.exec(`
+        insert into auth.users (id, email, raw_user_meta_data)
+        values ('${NEW_USER}', 'x@example.com', '{"pseudo": "  Le\\tRoi\\n${"x".repeat(40)}  "}')
+      `);
+      expect(await pseudoOf(NEW_USER)).toBe(`LeRoi${"x".repeat(25)}`);
+    });
+
+    it.each([
+      ["a blank pseudo", `'{"pseudo": " \\n "}'`],
+      ["missing metadata", "null"],
+    ])("falls back to Anonyme on %s, never on the email", async (_label, metadata) => {
+      await db.exec(`
+        insert into auth.users (id, email, raw_user_meta_data)
+        values ('${NEW_USER}', 'secret.name@example.com', ${metadata})
+      `);
+      expect(await pseudoOf(NEW_USER)).toBe("Anonyme");
+    });
+
+    it("rejects an empty pseudo", async () => {
+      await expect(
+        db.exec(`update profiles set pseudo = '' where id = '${U1}'`),
+      ).rejects.toThrow(/profiles_pseudo_length/);
+    });
   });
 });
