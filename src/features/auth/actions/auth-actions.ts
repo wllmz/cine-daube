@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -31,20 +30,9 @@ function readText(formData: FormData, field: string): string {
   return typeof value === "string" ? value : "";
 }
 
-async function requestOrigin(): Promise<string> {
-  const requestHeaders = await headers();
-  const origin = requestHeaders.get("origin");
-  if (origin) return origin;
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? "https";
-  return `${protocol}://${host}`;
-}
-
-function callbackUrl(origin: string, next: string): string {
-  const url = new URL("/auth/callback", origin);
-  url.searchParams.set("next", next);
-  return url.toString();
-}
+// Email links are built by the Supabase email templates from the project's
+// Site URL ({{ .SiteURL }}/auth/confirm?token_hash=...), never from request
+// headers, so a forged Host header cannot redirect them.
 
 export async function signIn(_state: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const email = readText(formData, "email");
@@ -74,11 +62,8 @@ export async function signUp(_state: AuthFormState, formData: FormData): Promise
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: {
-      // Read by the on_auth_user_created trigger to create the profile.
-      data: { pseudo },
-      emailRedirectTo: callbackUrl(await requestOrigin(), AFTER_SIGN_IN_PATH),
-    },
+    // Read by the on_auth_user_created trigger to create the profile.
+    options: { data: { pseudo } },
   });
   if (error) {
     return { error: authErrorMessage(error), values };
@@ -105,9 +90,7 @@ export async function requestPasswordReset(
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: callbackUrl(await requestOrigin(), "/reset-password"),
-  });
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email);
   // Only rate limits are surfaced: the answer must not reveal whether an account exists.
   if (error?.code === "over_email_send_rate_limit" || error?.code === "over_request_rate_limit") {
     return { error: authErrorMessage(error), values: { email } };
@@ -136,11 +119,19 @@ export async function updatePassword(
     return { error: authErrorMessage(error) };
   }
 
+  // A reset often follows a compromise: end every other session. The password
+  // is already changed, so a failure here must not block the user.
+  await supabase.auth.signOut({ scope: "others" });
+
   redirect(AFTER_SIGN_IN_PATH);
 }
 
-export async function signOut(): Promise<void> {
+/** Signs out this device only, and reports failures instead of a silent no-op. */
+export async function signOut(): Promise<AuthFormState> {
   const supabase = await createSupabaseServerClient();
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut({ scope: "local" });
+  if (error) {
+    return { error: "Impossible de te déconnecter, réessaie." };
+  }
   redirect(SIGN_IN_PATH);
 }

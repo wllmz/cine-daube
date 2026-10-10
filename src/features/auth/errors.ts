@@ -12,6 +12,8 @@ const MESSAGES: Record<string, string> = {
   over_email_send_rate_limit: "Trop d'emails envoyés, réessaie dans quelques minutes.",
   over_request_rate_limit: "Trop de tentatives, réessaie dans quelques minutes.",
   session_not_found: "Ta session a expiré, recommence depuis le lien reçu par email.",
+  otp_expired: "Ce lien a expiré ou a déjà servi, redemande-en un.",
+  reauthentication_needed: "Par sécurité, reconnecte-toi avant de changer ton mot de passe.",
 };
 
 export const GENERIC_AUTH_ERROR = "Oups, quelque chose a planté. Réessaie.";

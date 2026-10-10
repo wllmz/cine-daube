@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { FormAlert } from "@/components/ui/form-alert";
 import { TextField } from "@/components/ui/text-field";
 import { signIn } from "../actions/auth-actions";
+import { useFocusFirstInvalid } from "../hooks/use-focus-first-invalid";
 import type { AuthFormState } from "../types";
 
 const LINK_ERROR = "Ce lien a expiré ou a déjà servi. Reconnecte-toi ou demande-en un nouveau.";
@@ -14,12 +15,13 @@ const LINK_ERROR = "Ce lien a expiré ou a déjà servi. Reconnecte-toi ou deman
 export function LoginForm() {
   const searchParams = useSearchParams();
   const [state, formAction, pending] = useActionState<AuthFormState, FormData>(signIn, {});
+  const formRef = useFocusFirstInvalid(state.fieldErrors);
   const hasSubmitted = Object.keys(state).length > 0;
   const linkError = !hasSubmitted && searchParams.get("error") === "link" ? LINK_ERROR : undefined;
   const error = state.error ?? linkError;
 
   return (
-    <form action={formAction} className="flex flex-col gap-3.5" noValidate>
+    <form ref={formRef} action={formAction} className="flex flex-col gap-3.5" noValidate>
       <input type="hidden" name="next" value={searchParams.get("next") ?? ""} />
       {error && <FormAlert tone="error">{error}</FormAlert>}
       <TextField

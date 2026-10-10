@@ -12,9 +12,6 @@ const auth = {
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({ auth }),
 }));
-vi.mock("next/headers", () => ({
-  headers: async () => new Headers({ origin: "https://cinedaube.test" }),
-}));
 vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
     throw new RedirectSignal(path);
@@ -27,7 +24,9 @@ class RedirectSignal extends Error {
   }
 }
 
-const { requestPasswordReset, signIn, signUp, updatePassword } = await import("./auth-actions");
+const { requestPasswordReset, signIn, signOut, signUp, updatePassword } = await import(
+  "./auth-actions"
+);
 
 function form(fields: Record<string, string>): FormData {
   const data = new FormData();
@@ -88,10 +87,7 @@ describe("signUp", () => {
     expect(auth.signUp).toHaveBeenCalledWith({
       email: "will@example.fr",
       password: "nanar1234",
-      options: {
-        data: { pseudo: "Will" },
-        emailRedirectTo: "https://cinedaube.test/auth/callback?next=%2Frooms",
-      },
+      options: { data: { pseudo: "Will" } },
     });
   });
 
@@ -120,9 +116,7 @@ describe("requestPasswordReset", () => {
     const state = await requestPasswordReset({}, form({ email: "ghost@example.fr" }));
     expect(state.error).toBeUndefined();
     expect(state.success).toContain("Si un compte existe");
-    expect(auth.resetPasswordForEmail).toHaveBeenCalledWith("ghost@example.fr", {
-      redirectTo: "https://cinedaube.test/auth/callback?next=%2Freset-password",
-    });
+    expect(auth.resetPasswordForEmail).toHaveBeenCalledWith("ghost@example.fr");
   });
 
   it("surfaces rate limits", async () => {
@@ -139,11 +133,34 @@ describe("updatePassword", () => {
     expect(auth.updateUser).not.toHaveBeenCalled();
   });
 
-  it("redirects to the rooms once updated", async () => {
+  it("ends the other sessions, then redirects to the rooms", async () => {
     auth.updateUser.mockResolvedValue({ error: null });
+    auth.signOut.mockResolvedValue({ error: null });
     const path = await redirectPathOf(
       updatePassword({}, form({ password: "nanar1234", confirmation: "nanar1234" })),
     );
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "others" });
     expect(path).toBe("/rooms");
+  });
+
+  it("does not sign anyone out when the update fails", async () => {
+    auth.updateUser.mockResolvedValue({ error: { code: "same_password" } });
+    const state = await updatePassword({}, form({ password: "nanar1234", confirmation: "nanar1234" }));
+    expect(state.error).toBe("Choisis un mot de passe différent de l'ancien.");
+    expect(auth.signOut).not.toHaveBeenCalled();
+  });
+});
+
+describe("signOut", () => {
+  it("signs out this device only, then goes to login", async () => {
+    auth.signOut.mockResolvedValue({ error: null });
+    expect(await redirectPathOf(signOut())).toBe("/login");
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+  });
+
+  it("reports a failure instead of pretending it worked", async () => {
+    auth.signOut.mockResolvedValue({ error: { code: "unexpected_failure" } });
+    const state = await signOut();
+    expect(state.error).toBe("Impossible de te déconnecter, réessaie.");
   });
 });

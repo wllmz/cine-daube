@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { FormAlert } from "@/components/ui/form-alert";
 import { TextField } from "@/components/ui/text-field";
 import { requestPasswordReset } from "../actions/auth-actions";
+import { useFocusFirstInvalid } from "../hooks/use-focus-first-invalid";
 import type { AuthFormState } from "../types";
 
 export function ForgotPasswordForm() {
@@ -12,13 +13,14 @@ export function ForgotPasswordForm() {
     requestPasswordReset,
     {},
   );
+  const formRef = useFocusFirstInvalid(state.fieldErrors);
 
   if (state.success) {
     return <FormAlert tone="success">{state.success}</FormAlert>;
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-3.5" noValidate>
+    <form ref={formRef} action={formAction} className="flex flex-col gap-3.5" noValidate>
       {state.error && <FormAlert tone="error">{state.error}</FormAlert>}
       <TextField
         label="Email"

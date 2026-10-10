@@ -9,8 +9,8 @@ import { SIGN_IN_PATH } from "../redirect";
 import type { CurrentUser } from "../types";
 
 /**
- * Data Access Layer entry point: every protected page and server action
- * goes through here. Redirects to the login page when signed out.
+ * Data Access Layer entry point for app data: protected pages and server
+ * actions resolve the user here. Redirects to the login page when signed out.
  * `getClaims` verifies the JWT signature, unlike `getSession` which trusts
  * the cookie as-is.
  */
@@ -24,7 +24,11 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser> => {
     .from(profiles)
     .where(eq(profiles.id, data.claims.sub))
     .limit(1);
-  if (!profile) redirect(SIGN_IN_PATH);
+  // The signup trigger guarantees a profile. Redirecting to /login here would
+  // loop (the proxy sends signed-in users back), so fail loudly instead.
+  if (!profile) {
+    throw new Error(`No profile for authenticated user ${data.claims.sub}`);
+  }
 
   return { id: data.claims.sub, email: data.claims.email ?? "", pseudo: profile.pseudo };
 });
