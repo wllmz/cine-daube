@@ -7,7 +7,7 @@ import { getServerEnv } from "@/config/env";
 import { getCurrentUser } from "@/features/auth/server";
 import { InvitePanel, MemberList, formatInviteCode } from "@/features/rooms";
 import { getRoomInvite, getRoomMembers } from "@/features/rooms/server";
-import { formatShortDate } from "@/lib/format";
+import { formatShortDateTime } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Inviter · Ciné Daube" };
 
@@ -26,12 +26,14 @@ async function InviteContent({ params }: { params: Promise<{ roomId: string }> }
         <BackLink href={`/rooms/${room.id}`} label={`Retour à ${room.name}`} />
         <h1 className="truncate text-[22px] font-extrabold tracking-tight">{room.name}</h1>
       </header>
+      {/* Keyed by code: a new code resets the panel (copy and confirm states). */}
       <InvitePanel
+        key={room.inviteCode}
         roomId={room.id}
         roomName={room.name}
         displayCode={formatInviteCode(room.inviteCode)}
         inviteUrl={inviteUrl}
-        expiresLabel={formatShortDate(room.inviteExpiresAt)}
+        expiresLabel={formatShortDateTime(room.inviteExpiresAt)}
         isExpired={room.isExpired}
         isAdmin={room.role === "admin"}
       />

@@ -4,17 +4,18 @@ import { Suspense } from "react";
 import { buttonClassName } from "@/components/ui/button";
 import { Tomy } from "@/components/ui/tomy";
 import { JoinRoomForm, normalizeInviteCode } from "@/features/rooms";
+import { INVALID_INVITE_MESSAGE } from "@/features/rooms/messages";
 import { getInvitePreview } from "@/features/rooms/server";
 import { plural } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Invitation · Ciné Daube" };
 
-function InvalidInvite({ reason }: { reason: string }) {
+function InvalidInvite() {
   return (
     <>
       <Tomy mood="degoute" size={112} />
       <h1 className="text-[22px] font-extrabold tracking-tight">Invitation invalide</h1>
-      <p className="text-sm leading-relaxed text-muted">{reason}</p>
+      <p className="text-sm leading-relaxed text-muted">{INVALID_INVITE_MESSAGE}</p>
       <Link href="/join" className={buttonClassName("secondary", "w-full")}>
         Entrer un code
       </Link>
@@ -23,23 +24,36 @@ function InvalidInvite({ reason }: { reason: string }) {
 }
 
 async function Invite({ params }: { params: Promise<{ code: string }> }) {
-  const { code: rawCode } = await params;
-  const code = normalizeInviteCode(decodeURIComponent(rawCode));
-  const room = code ? await getInvitePreview(code) : null;
-  if (!code || !room) {
-    return <InvalidInvite reason="Ce lien ne correspond à aucune room. Vérifie-le auprès de tes potes." />;
+  // Next already decodes the segment; anything outside the alphabet is rejected.
+  const code = normalizeInviteCode((await params).code);
+  if (!code) return <InvalidInvite />;
+
+  const preview = await getInvitePreview(code);
+  if (preview.status === "invalid") return <InvalidInvite />;
+
+  if (preview.status === "member") {
+    return (
+      <>
+        <Tomy mood="content" size={112} />
+        <h1 className="text-[22px] font-extrabold tracking-tight">Tu fais déjà partie de cette room</h1>
+        <Link href={`/rooms/${preview.roomId}`} className={buttonClassName("primary", "w-full")}>
+          Ouvrir la room
+        </Link>
+      </>
+    );
   }
 
-  if (room.isExpired) {
-    return <InvalidInvite reason="Ce lien a expiré. Demande un nouveau lien à l'admin de la room." />;
-  }
-
+  const { room } = preview;
   return (
     <>
       <Tomy mood="content" size={112} />
       <p className="text-sm text-muted">On t&apos;invite dans</p>
       <h1 className="text-[28px] leading-tight font-extrabold tracking-tight">{room.name}</h1>
-      <p className="text-sm text-muted">{plural(room.memberCount, "membre")} t&apos;y attendent déjà.</p>
+      <p className="text-sm text-muted">
+        {room.memberCount > 1
+          ? `${plural(room.memberCount, "membre")} t'y attendent déjà.`
+          : "1 membre t'y attend déjà."}
+      </p>
       <div className="w-full">
         <JoinRoomForm code={code} submitLabel="Rejoindre la room" />
       </div>

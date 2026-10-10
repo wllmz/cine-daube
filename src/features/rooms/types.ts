@@ -40,6 +40,6 @@ export type JoinRoomResult =
 /** State returned by room server actions to their `useActionState` form. */
 export type RoomFormState = {
   error?: string;
-  fieldErrors?: Partial<Record<string, string>>;
+  fieldErrors?: Partial<Record<"name" | "code", string>>;
   values?: { name?: string; code?: string };
 };

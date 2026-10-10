@@ -4,6 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { getCurrentUser } from "@/features/auth/server";
+import { INVALID_INVITE_MESSAGE } from "../messages";
 import { createRoomSchema, inviteCodeSchema, roomIdSchema } from "../schemas";
 import { createRoom, joinRoom, regenerateInviteCode } from "../services/room-service";
 import type { RoomFormState } from "../types";
@@ -28,10 +29,6 @@ export async function createRoomAction(
   redirect(`/rooms/${room.id}/invite`);
 }
 
-const JOIN_ERRORS = {
-  not_found: "Aucune room avec ce code. Vérifie-le auprès de tes potes.",
-  expired: "Ce code a expiré. Demande un nouveau lien à l'admin de la room.",
-} as const;
 
 export async function joinRoomAction(
   _state: RoomFormState,
@@ -46,7 +43,7 @@ export async function joinRoomAction(
 
   const result = await joinRoom(getDb(), { userId: user.id, code: parsed.data });
   if (!("roomId" in result)) {
-    return { error: JOIN_ERRORS[result.status], values: { code } };
+    return { error: INVALID_INVITE_MESSAGE, values: { code } };
   }
   redirect(`/rooms/${result.roomId}`);
 }

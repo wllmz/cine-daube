@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatScore, formatShortDate, plural } from "./format";
+import { formatScore, formatShortDate, formatShortDateTime, plural } from "./format";
+
+describe("formatShortDateTime", () => {
+  it("adds the Paris time", () => {
+    expect(formatShortDateTime(new Date("2026-10-17T19:04:00Z"))).toBe("17 oct. à 21:04");
+  });
+});
 
 describe("formatShortDate", () => {
   it("uses the Paris day, whatever the server time zone", () => {

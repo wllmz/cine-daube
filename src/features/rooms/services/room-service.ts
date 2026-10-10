@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import { isUniqueViolation } from "@/db/errors";
 import { profiles, roomMembers, roomMovies, rooms } from "@/db/schema";
@@ -134,21 +134,43 @@ export async function createRoom(
   );
 }
 
+/**
+ * Joins with a single INSERT … SELECT: the code and its expiry are checked in
+ * the same statement that writes the membership, so a code replaced by the
+ * admin a millisecond earlier can no longer be used.
+ */
 export async function joinRoom(
   db: Database,
   input: { userId: string; code: string; now?: Date },
 ): Promise<JoinRoomResult> {
-  const room = await findRoomByInviteCode(db, input.code);
-  if (!room) return { status: "not_found" };
-  if (room.inviteExpiresAt <= (input.now ?? new Date())) return { status: "expired" };
-
+  const now = input.now ?? new Date();
   const inserted = await db
     .insert(roomMembers)
-    .values({ roomId: room.id, userId: input.userId, role: "member" })
+    .select(
+      db
+        .select({
+          roomId: rooms.id,
+          userId: sql<string>`${input.userId}::uuid`.as("user_id"),
+          role: sql<"member">`'member'::member_role`.as("role"),
+          // Drizzle requires every column, in table order.
+          joinedAt: sql<Date>`now()`.as("joined_at"),
+        })
+        .from(rooms)
+        .where(and(eq(rooms.inviteCode, input.code), gt(rooms.inviteExpiresAt, now))),
+    )
     .onConflictDoNothing()
     .returning({ roomId: roomMembers.roomId });
 
-  return { status: inserted.length > 0 ? "joined" : "already_member", roomId: room.id };
+  const joined = inserted[0];
+  if (joined) return { status: "joined", roomId: joined.roomId };
+
+  // Nothing inserted: find out why, for the user.
+  const room = await findRoomByInviteCode(db, input.code);
+  if (!room) return { status: "not_found" };
+  if (await getRoomForMember(db, room.id, input.userId)) {
+    return { status: "already_member", roomId: room.id };
+  }
+  return { status: "expired" };
 }
 
 /** Replaces the invite code (and restarts its validity). Admins only. */

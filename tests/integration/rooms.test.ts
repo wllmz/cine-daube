@@ -77,6 +77,20 @@ describe("joinRoom", () => {
     expect((await getRoomForMember(db, roomId, will))?.role).toBe("admin");
   });
 
+  it("still opens the room for a member reusing an expired link", async () => {
+    await joinRoom(db, { userId: sarah, code: "AAAAAA", now: NOW });
+    expect(await joinRoom(db, { userId: sarah, code: "AAAAAA", now: LATER })).toEqual({
+      status: "already_member",
+      roomId,
+    });
+  });
+
+  it("refuses the previous code right after the admin replaced it", async () => {
+    await regenerateInviteCode(db, { roomId, userId: will, now: NOW, generateCode: codes("CCCCCC") });
+    expect(await joinRoom(db, { userId: sarah, code: "AAAAAA", now: NOW })).toEqual({ status: "not_found" });
+    expect(await joinRoom(db, { userId: sarah, code: "CCCCCC", now: NOW })).toEqual({ status: "joined", roomId });
+  });
+
   it("refuses unknown and expired codes", async () => {
     expect(await joinRoom(db, { userId: sarah, code: "ZZZZZZ", now: NOW })).toEqual({ status: "not_found" });
     expect(await joinRoom(db, { userId: sarah, code: "AAAAAA", now: LATER })).toEqual({ status: "expired" });

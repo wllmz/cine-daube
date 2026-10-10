@@ -29,6 +29,9 @@ export function InvitePanel({
 }: InvitePanelProps) {
   const [copied, setCopied] = useState<Copied>(null);
   const [copyFailed, setCopyFailed] = useState(false);
+  // Replacing a valid code breaks links already shared: ask once more.
+  const [confirmingRegenerate, setConfirmingRegenerate] = useState(false);
+  const needsConfirmation = !isExpired && !confirmingRegenerate;
   const [state, regenerate, regenerating] = useActionState<RoomFormState>(
     () => regenerateInviteAction(roomId),
     {},
@@ -107,9 +110,31 @@ export function InvitePanel({
       {isAdmin && (
         <form action={regenerate} className="flex flex-col gap-2">
           {state.error && <FormAlert tone="error">{state.error}</FormAlert>}
-          <Button type="submit" variant="ghost" disabled={regenerating}>
-            {regenerating ? "Nouveau code…" : isExpired ? "Générer un nouveau code" : "Changer le code"}
-          </Button>
+          {confirmingRegenerate && (
+            <p role="status" className="text-center text-[13px] text-accent-strong">
+              Les liens déjà partagés ne marcheront plus.
+            </p>
+          )}
+          {needsConfirmation ? (
+            <Button variant="ghost" onClick={() => setConfirmingRegenerate(true)}>
+              Changer le code
+            </Button>
+          ) : (
+            <div className={confirmingRegenerate ? "grid grid-cols-2 gap-2" : "flex"}>
+              {confirmingRegenerate && (
+                <Button variant="ghost" onClick={() => setConfirmingRegenerate(false)}>
+                  Annuler
+                </Button>
+              )}
+              <Button type="submit" variant="ghost" disabled={regenerating} className="flex-1 text-accent-strong">
+                {regenerating
+                  ? "Nouveau code…"
+                  : isExpired
+                    ? "Générer un nouveau code"
+                    : "Oui, changer le code"}
+              </Button>
+            </div>
+          )}
         </form>
       )}
       {!isAdmin && isExpired && (

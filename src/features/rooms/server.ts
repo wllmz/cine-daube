@@ -41,15 +41,27 @@ async function isExpired(expiresAt: Date): Promise<boolean> {
   return expiresAt.getTime() <= Date.now();
 }
 
+/** Every member can see and share the room's code; only admins can replace it. */
 export async function getRoomInvite(roomId: string): Promise<RoomDetails & { isExpired: boolean }> {
   const room = await requireRoomMember(roomId);
   return { ...room, isExpired: await isExpired(room.inviteExpiresAt) };
 }
 
-export async function getInvitePreview(
-  code: string,
-): Promise<(RoomInvitePreview & { isExpired: boolean }) | null> {
-  await getCurrentUser();
-  const room = await findRoomByInviteCode(getDb(), code);
-  return room && { ...room, isExpired: await isExpired(room.inviteExpiresAt) };
+export type InvitePreview =
+  | { status: "invalid" }
+  | { status: "member"; roomId: string }
+  | { status: "open"; room: RoomInvitePreview };
+
+/**
+ * What an invite link shows. Unknown and expired codes look the same, so the
+ * page cannot be used to learn which codes exist; members go to their room.
+ */
+export async function getInvitePreview(code: string): Promise<InvitePreview> {
+  const user = await getCurrentUser();
+  const db = getDb();
+  const room = await findRoomByInviteCode(db, code);
+  if (!room) return { status: "invalid" };
+  if (await getRoomForMember(db, room.id, user.id)) return { status: "member", roomId: room.id };
+  if (await isExpired(room.inviteExpiresAt)) return { status: "invalid" };
+  return { status: "open", room };
 }

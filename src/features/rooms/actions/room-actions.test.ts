@@ -64,19 +64,20 @@ describe("createRoomAction", () => {
 describe("joinRoomAction", () => {
   it("normalises the code and opens the room", async () => {
     services.joinRoom.mockResolvedValue({ status: "joined", roomId: ROOM_ID });
-    const path = await redirectPathOf(joinRoomAction({}, form({ code: "daube-7k2qxm" })));
-    expect(services.joinRoom).toHaveBeenCalledWith("db", { userId: "user-1", code: "7K2QXM" });
+    const path = await redirectPathOf(joinRoomAction({}, form({ code: "daube-7k2qxm9p" })));
+    expect(services.joinRoom).toHaveBeenCalledWith("db", { userId: "user-1", code: "7K2QXM9P" });
     expect(path).toBe(`/rooms/${ROOM_ID}`);
   });
 
-  it.each([
-    ["not_found", "Aucune room avec ce code"],
-    ["expired", "Ce code a expiré"],
-  ])("explains a %s code", async (status, message) => {
-    services.joinRoom.mockResolvedValue({ status });
-    const state = await joinRoomAction({}, form({ code: "7K2QXM" }));
-    expect(state.error).toContain(message);
-    expect(state.values?.code).toBe("7K2QXM");
+  it("gives the same answer for unknown and expired codes", async () => {
+    services.joinRoom.mockResolvedValue({ status: "not_found" });
+    const unknown = await joinRoomAction({}, form({ code: "7K2QXM9P" }));
+    services.joinRoom.mockResolvedValue({ status: "expired" });
+    const expired = await joinRoomAction({}, form({ code: "7K2QXM9P" }));
+
+    expect(unknown.error).toBe(expired.error);
+    expect(unknown.error).toContain("pas (ou plus) valide");
+    expect(unknown.values?.code).toBe("7K2QXM9P");
   });
 
   it("rejects something that cannot be a code without querying", async () => {
