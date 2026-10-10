@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { BackLink } from "@/components/ui/back-link";
+import { buttonClassName } from "@/components/ui/button";
 import { PROVIDER_LABELS } from "@/features/catalog";
 import {
   AutoRefresh,
@@ -88,9 +90,9 @@ function RouletteScreen({ room, members, currentUserId, spin }: RouletteState) {
               </span>
             </p>
             <MovieCard movie={spin.movie} />
-            <p className="rounded-[14px] bg-subtle p-3.5 text-center text-[13px] text-muted">
-              La notation du film arrive très vite.
-            </p>
+            <Link href={`/rooms/${room.id}/movies/${spin.movie.tmdbId}/rate`} className={buttonClassName("primary")}>
+              Film terminé ? On le note
+            </Link>
             {/* The accepted film counts as watched: this starts the next movie night. */}
             <details className="rounded-[14px] border border-line p-3.5">
               <summary className="cursor-pointer text-sm font-semibold">On l&apos;a vu ! Nouvelle roulette</summary>
