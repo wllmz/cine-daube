@@ -62,6 +62,15 @@ function isRetryableStatus(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
+/** "fetch failed" alone hides the real cause (ECONNRESET, ENOTFOUND, timeout…). */
+function describeNetworkError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause;
+  const detail =
+    cause && typeof cause === "object" && "code" in cause ? String(cause.code) : cause instanceof Error ? cause.message : "";
+  return detail ? `${error.message} (${detail})` : error.message;
+}
+
 /** Retry-After is seconds or an HTTP date; anything unusable falls back to backoff. */
 function retryDelayMs(response: Response | null, attempt: number): number {
   const retryAfter = Number(response?.headers.get("retry-after"));
@@ -94,7 +103,7 @@ export function createTmdbClient(options: {
           await sleep(retryDelayMs(null, attempt));
           continue;
         }
-        throw new TmdbError(`TMDB ${path} unreachable: ${error instanceof Error ? error.message : String(error)}`);
+        throw new TmdbError(`TMDB ${path} unreachable: ${describeNetworkError(error)}`);
       }
 
       if (isRetryableStatus(response.status) && attempt < MAX_ATTEMPTS) {

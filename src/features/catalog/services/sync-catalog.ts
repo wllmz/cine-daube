@@ -169,7 +169,8 @@ export async function syncCatalog(
     return removed.length;
   });
 
-  const runtimes = await fillMissingRuntimes(db, client, options.maxRuntimeLookups ?? 60);
+  // A full sync of ~400 films takes ~15s: 300 lookups fit easily in maxDuration.
+  const runtimes = await fillMissingRuntimes(db, client, options.maxRuntimeLookups ?? 300);
 
   const providerLinks = Object.fromEntries(
     STREAMING_PROVIDERS.map((provider) => [provider, linksByProvider.get(provider)?.length ?? 0]),
