@@ -1,22 +1,37 @@
 import "server-only";
-import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, count, eq, exists, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import { movieProviders, movies } from "@/db/schema";
 import { resolveProviderIds } from "../providers";
 import type { TmdbClient, TmdbMovieSummary } from "../tmdb-client";
-import { STREAMING_PROVIDERS, type StreamingProvider, type SyncReport } from "../types";
+import {
+  STREAMING_PROVIDERS,
+  SyncAlreadyRunningError,
+  type IncompleteReason,
+  type StreamingProvider,
+  type SyncReport,
+} from "../types";
 
 export type SyncOptions = {
   now?: Date;
   /** Skips obscure films nobody can judge (and TMDB noise). */
   minVoteCount?: number;
-  /** 20 results per page: 25 pages = 500 films per platform at most. */
+  /** 20 results per page: 50 pages = 1000 films per platform. */
   maxPagesPerProvider?: number;
   /** Runtimes need one request per film: filled progressively, run after run. */
   maxRuntimeLookups?: number;
+  /**
+   * A platform returning less than this share of yesterday's films is
+   * treated as a TMDB glitch: its existing links are kept.
+   */
+  minShareOfPrevious?: number;
 };
 
 const WRITE_CHUNK = 500;
+// Arbitrary constant identifying the catalog sync lock.
+const SYNC_LOCK_KEY = 4_242_001;
+// Below this many links, a drop is not considered suspicious (tiny catalogs move a lot).
+const MIN_LINKS_FOR_DROP_CHECK = 10;
 
 function releaseYear(date: string): number | null {
   const year = Number.parseInt(date.slice(0, 4), 10);
@@ -29,27 +44,30 @@ function chunks<T>(items: T[], size: number): T[][] {
   return result;
 }
 
-/** Every page of French comedies for one platform. */
+/** Every page of French comedies for one platform, and whether it was cut short. */
 async function fetchPlatform(
   client: TmdbClient,
   providerIds: number[],
   minVoteCount: number,
   maxPages: number,
-): Promise<TmdbMovieSummary[]> {
+): Promise<{ films: TmdbMovieSummary[]; truncated: boolean }> {
   const films: TmdbMovieSummary[] = [];
-  for (let page = 1; page <= maxPages; page += 1) {
+  for (let page = 1; ; page += 1) {
     const result = await client.discoverFrenchComedies({ providerIds, page, minVoteCount });
     films.push(...result.results);
-    if (page >= result.total_pages) break;
+    if (page >= result.total_pages) return { films, truncated: false };
+    if (page >= maxPages) return { films, truncated: true };
   }
-  return films;
 }
 
 /**
  * Mirrors TMDB's French comedies on the 4 platforms into `movies` and
- * `movie_providers`. Everything is fetched before anything is written, then
- * applied in one transaction: a TMDB failure leaves yesterday's catalog
- * intact instead of emptying a platform.
+ * `movie_providers`.
+ *
+ * Everything is fetched before anything is written, then applied in one
+ * transaction. Stale links are only removed for platforms whose fetch is
+ * complete and plausible: an empty, truncated or collapsing TMDB answer keeps
+ * yesterday's links instead of emptying the roulette.
  */
 export async function syncCatalog(
   db: Database,
@@ -59,31 +77,45 @@ export async function syncCatalog(
   const startedAt = Date.now();
   const now = options.now ?? new Date();
   const minVoteCount = options.minVoteCount ?? 20;
-  const maxPages = options.maxPagesPerProvider ?? 25;
+  const maxPages = options.maxPagesPerProvider ?? 50;
+  const minShare = options.minShareOfPrevious ?? 0.5;
 
   const providerIds = resolveProviderIds(await client.listMovieProviders());
 
   const films = new Map<number, TmdbMovieSummary>();
-  const links: { movieId: number; provider: StreamingProvider }[] = [];
-  const providerLinks = Object.fromEntries(STREAMING_PROVIDERS.map((p) => [p, 0])) as Record<
-    StreamingProvider,
-    number
-  >;
+  const linksByProvider = new Map<StreamingProvider, number[]>();
+  const incompletePlatforms: SyncReport["incompletePlatforms"] = {};
 
   for (const provider of STREAMING_PROVIDERS) {
-    const platformFilms = await fetchPlatform(client, providerIds[provider], minVoteCount, maxPages);
-    const seen = new Set<number>();
-    for (const film of platformFilms) {
+    const result = await fetchPlatform(client, providerIds[provider], minVoteCount, maxPages);
+    const ids = new Set<number>();
+    for (const film of result.films) {
       films.set(film.id, film);
-      if (!seen.has(film.id)) {
-        seen.add(film.id);
-        links.push({ movieId: film.id, provider });
-      }
+      ids.add(film.id);
     }
-    providerLinks[provider] = seen.size;
+    linksByProvider.set(provider, [...ids]);
+    if (result.truncated) incompletePlatforms[provider] = "truncated";
   }
 
   const linksRemoved = await db.transaction(async (tx) => {
+    // One writer at a time (duplicate cron delivery, manual run). Transaction
+    // scoped, so it works through the Supabase transaction pooler.
+    const [lock] = await tx
+      .select({ locked: sql<boolean>`pg_try_advisory_xact_lock(${SYNC_LOCK_KEY})` })
+      .from(sql`(values (1)) as single_row(x)`);
+    if (!lock?.locked) throw new SyncAlreadyRunningError();
+
+    const previous = await tx
+      .select({ provider: movieProviders.provider, links: count() })
+      .from(movieProviders)
+      .groupBy(movieProviders.provider);
+    for (const { provider, links } of previous) {
+      const fetched = linksByProvider.get(provider)?.length ?? 0;
+      if (links >= MIN_LINKS_FOR_DROP_CHECK && fetched < links * minShare && !incompletePlatforms[provider]) {
+        incompletePlatforms[provider] = "suspicious_drop";
+      }
+    }
+
     for (const batch of chunks([...films.values()], WRITE_CHUNK)) {
       await tx
         .insert(movies)
@@ -113,55 +145,84 @@ export async function syncCatalog(
         });
     }
 
+    const links = [...linksByProvider].flatMap(([provider, ids]) =>
+      ids.map((movieId) => ({ movieId, provider, syncedAt: now })),
+    );
     for (const batch of chunks(links, WRITE_CHUNK)) {
       await tx
         .insert(movieProviders)
-        .values(batch.map((link) => ({ ...link, syncedAt: now })))
+        .values(batch)
         .onConflictDoUpdate({
           target: [movieProviders.movieId, movieProviders.provider],
           set: { syncedAt: sql`excluded.synced_at` },
         });
     }
 
-    // Films that left a platform since the last run. Movies themselves stay:
+    // Films that left a platform: links this run did not touch. Movies stay,
     // spins and ratings reference them.
+    const complete = STREAMING_PROVIDERS.filter((provider) => !incompletePlatforms[provider]);
+    if (complete.length === 0) return 0;
     const removed = await tx
       .delete(movieProviders)
-      .where(lt(movieProviders.syncedAt, now))
+      .where(and(inArray(movieProviders.provider, complete), ne(movieProviders.syncedAt, now)))
       .returning({ movieId: movieProviders.movieId });
     return removed.length;
   });
 
-  const runtimesFilled = await fillMissingRuntimes(db, client, options.maxRuntimeLookups ?? 60);
+  const runtimes = await fillMissingRuntimes(db, client, options.maxRuntimeLookups ?? 60);
+
+  const providerLinks = Object.fromEntries(
+    STREAMING_PROVIDERS.map((provider) => [provider, linksByProvider.get(provider)?.length ?? 0]),
+  ) as Record<StreamingProvider, number>;
 
   return {
     moviesUpserted: films.size,
     providerLinks,
     linksRemoved,
-    runtimesFilled,
+    incompletePlatforms: incompletePlatforms satisfies Partial<Record<StreamingProvider, IncompleteReason>>,
+    runtimesFilled: runtimes.filled,
+    runtimeErrors: runtimes.errors,
     durationMs: Date.now() - startedAt,
   };
 }
 
-/** Looks up runtimes for available films that don't have one yet. */
-async function fillMissingRuntimes(db: Database, client: TmdbClient, limit: number): Promise<number> {
-  if (limit <= 0) return 0;
+/**
+ * Looks up runtimes for available films that don't have one yet. Random
+ * order, so films TMDB has no runtime for cannot block the others forever;
+ * one failing film is skipped, not fatal (the catalog is already committed).
+ */
+async function fillMissingRuntimes(
+  db: Database,
+  client: TmdbClient,
+  limit: number,
+): Promise<{ filled: number; errors: number }> {
+  if (limit <= 0) return { filled: 0, errors: 0 };
+  const available = db
+    .select({ one: sql`1` })
+    .from(movieProviders)
+    .where(eq(movieProviders.movieId, movies.tmdbId));
   const missing = await db
-    .selectDistinct({ tmdbId: movies.tmdbId })
+    .select({ tmdbId: movies.tmdbId })
     .from(movies)
-    .innerJoin(movieProviders, eq(movieProviders.movieId, movies.tmdbId))
-    .where(isNull(movies.runtimeMinutes))
+    .where(and(isNull(movies.runtimeMinutes), exists(available)))
+    .orderBy(sql`random()`)
     .limit(limit);
 
   let filled = 0;
+  let errors = 0;
   for (const { tmdbId } of missing) {
-    const runtime = await client.getRuntime(tmdbId);
-    if (runtime === null) continue;
-    await db
-      .update(movies)
-      .set({ runtimeMinutes: runtime })
-      .where(and(eq(movies.tmdbId, tmdbId), isNull(movies.runtimeMinutes)));
-    filled += 1;
+    try {
+      const runtime = await client.getRuntime(tmdbId);
+      if (runtime === null) continue;
+      await db
+        .update(movies)
+        .set({ runtimeMinutes: runtime })
+        .where(and(eq(movies.tmdbId, tmdbId), isNull(movies.runtimeMinutes)));
+      filled += 1;
+    } catch (error) {
+      errors += 1;
+      console.warn(`Runtime lookup failed for TMDB movie ${tmdbId}`, error);
+    }
   }
-  return filled;
+  return { filled, errors };
 }

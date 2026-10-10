@@ -55,10 +55,16 @@ describe("GET /api/cron/sync-catalog", () => {
     expect(await response.json()).toEqual({ error: "Catalog sync failed" });
   });
 
-  it("says so when the TMDB token is not configured", async () => {
+  it("is unavailable when the catalog is not configured", async () => {
     env.ok = false;
     const response = await call(`Bearer ${SECRET}`);
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(503);
     expect(syncCatalog).not.toHaveBeenCalled();
+  });
+
+  it("tells a concurrent run apart from a failure", async () => {
+    const { SyncAlreadyRunningError } = await import("@/features/catalog/types");
+    syncCatalog.mockRejectedValue(new SyncAlreadyRunningError());
+    expect((await call(`Bearer ${SECRET}`)).status).toBe(409);
   });
 });

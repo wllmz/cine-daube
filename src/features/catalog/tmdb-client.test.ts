@@ -59,6 +59,34 @@ describe("createTmdbClient", () => {
     expect(sleep).toHaveBeenCalledWith(2000);
   });
 
+  it("retries server errors and network failures, with a timeout on every request", async () => {
+    const sleep = vi.fn(async () => undefined);
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(json({}, 503))
+      .mockResolvedValueOnce(json({ id: 42, runtime: 94 }));
+    const client = createTmdbClient({ token: "t", fetch, sleep });
+
+    expect(await client.getRuntime(42)).toBe(94);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const init = fetch.mock.calls[0]?.[1] as RequestInit;
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("gives up after 3 attempts", async () => {
+    const client = createTmdbClient({ token: "t", fetch: async () => json({}, 500), sleep: async () => undefined });
+    await expect(client.getRuntime(42)).rejects.toMatchObject({ status: 500 });
+  });
+
+  it("sorts on a stable key so pages don't shift during a sync", async () => {
+    const fetch = vi.fn(async () => json(page));
+    await createTmdbClient({ token: "t", fetch }).discoverFrenchComedies({ providerIds: [8], page: 1, minVoteCount: 20 });
+    const url = new URL((fetch.mock.calls[0] as unknown as [string])[0]);
+    expect(url.searchParams.get("sort_by")).toBe("original_title.asc");
+    expect(url.searchParams.has("region")).toBe(false);
+  });
+
   it("fails clearly on errors and unexpected payloads", async () => {
     const client401 = createTmdbClient({ token: "bad", fetch: async () => json({}, 401) });
     await expect(client401.listMovieProviders()).rejects.toMatchObject({ status: 401 });

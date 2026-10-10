@@ -1,6 +1,6 @@
 // @vitest-environment node
 import type { PGlite } from "@electric-sql/pglite";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/db";
 import { syncCatalog } from "@/features/catalog/services/sync-catalog";
 import type { DiscoverComediesQuery, TmdbClient, TmdbMovieSummary } from "@/features/catalog/tmdb-client";
@@ -126,6 +126,57 @@ describe("syncCatalog", () => {
       { movie_id: 1, provider: "netflix" },
       { movie_id: 2, provider: "canal_plus" },
     ]);
+  });
+
+  it("keeps a platform's links when TMDB suddenly returns (almost) nothing for it", async () => {
+    const canal = Array.from({ length: 12 }, (_, i) => film(100 + i, `Canal ${i}`));
+    await syncCatalog(db, fakeTmdb({ 8: [film(1, "A")], 119: [], 337: [], 381: canal }).client, {
+      now: new Date("2026-10-10T04:00:00Z"),
+    });
+
+    const report = await syncCatalog(db, fakeTmdb({ 8: [film(1, "A")], 119: [], 337: [], 381: [] }).client, {
+      now: new Date("2026-10-11T04:00:00Z"),
+    });
+
+    expect(report.incompletePlatforms).toEqual({ canal_plus: "suspicious_drop" });
+    expect(report.linksRemoved).toBe(0);
+    expect(await rows("select count(*)::int as n from movie_providers where provider = 'canal_plus'")).toEqual([{ n: 12 }]);
+  });
+
+  it("keeps links beyond the page cap instead of rotating the catalog", async () => {
+    const catalog = { 8: [film(1, "A"), film(2, "B"), film(3, "C")], 119: [], 337: [], 381: [] };
+    await syncCatalog(db, fakeTmdb(catalog).client, { now: new Date("2026-10-10T04:00:00Z") });
+
+    const report = await syncCatalog(db, fakeTmdb(catalog).client, {
+      now: new Date("2026-10-11T04:00:00Z"),
+      maxPagesPerProvider: 1,
+    });
+
+    expect(report.incompletePlatforms).toEqual({ netflix: "truncated" });
+    expect(await rows("select movie_id from movie_providers order by movie_id")).toEqual([
+      { movie_id: 1 },
+      { movie_id: 2 },
+      { movie_id: 3 },
+    ]);
+  });
+
+  it("does not let runtime lookups break or block the sync", async () => {
+    const { client } = fakeTmdb({ 8: [film(1, "A"), film(2, "B"), film(3, "C")], 119: [], 337: [], 381: [] });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    client.getRuntime = async (id) => {
+      if (id === 1) throw new Error("TMDB 404");
+      return id === 2 ? null : 95;
+    };
+
+    const report = await syncCatalog(db, client);
+
+    expect(report).toMatchObject({ runtimesFilled: 1, runtimeErrors: 1 });
+    expect(await rows("select tmdb_id, runtime_minutes from movies order by tmdb_id")).toEqual([
+      { tmdb_id: 1, runtime_minutes: null },
+      { tmdb_id: 2, runtime_minutes: null },
+      { tmdb_id: 3, runtime_minutes: 95 },
+    ]);
+    warn.mockRestore();
   });
 
   it("caps runtime lookups per run and resumes next time", async () => {

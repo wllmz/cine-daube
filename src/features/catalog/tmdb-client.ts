@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const API_BASE = "https://api.themoviedb.org/3";
 const MAX_ATTEMPTS = 3;
+const REQUEST_TIMEOUT_MS = 10_000;
 
 const providersSchema = z.object({
   results: z.array(z.object({ provider_id: z.number(), provider_name: z.string() })),
@@ -57,25 +58,47 @@ type Sleep = (ms: number) => Promise<void>;
 
 const COMEDY_GENRE_ID = 35;
 
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+/** Retry-After is seconds or an HTTP date; anything unusable falls back to backoff. */
+function retryDelayMs(response: Response | null, attempt: number): number {
+  const retryAfter = Number(response?.headers.get("retry-after"));
+  return Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000 * attempt;
+}
+
 export function createTmdbClient(options: {
   token: string;
   fetch?: FetchLike;
   sleep?: Sleep;
+  timeoutMs?: number;
 }): TmdbClient {
   const doFetch = options.fetch ?? fetch;
   const sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
 
   async function get<T>(path: string, params: Record<string, string>, schema: z.ZodType<T>): Promise<T> {
     const url = `${API_BASE}${path}?${new URLSearchParams(params)}`;
     for (let attempt = 1; ; attempt += 1) {
-      const response = await doFetch(url, {
-        headers: { Authorization: `Bearer ${options.token}`, Accept: "application/json" },
-      });
+      let response: Response;
+      try {
+        response = await doFetch(url, {
+          headers: { Authorization: `Bearer ${options.token}`, Accept: "application/json" },
+          // A stuck connection must not eat the whole cron run.
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+      } catch (error) {
+        // Network error or timeout.
+        if (attempt < MAX_ATTEMPTS) {
+          await sleep(retryDelayMs(null, attempt));
+          continue;
+        }
+        throw new TmdbError(`TMDB ${path} unreachable: ${error instanceof Error ? error.message : String(error)}`);
+      }
 
-      // Rate limited: wait as asked, then retry a couple of times.
-      if (response.status === 429 && attempt < MAX_ATTEMPTS) {
-        const retryAfter = Number(response.headers.get("retry-after"));
-        await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000 * attempt);
+      if (isRetryableStatus(response.status) && attempt < MAX_ATTEMPTS) {
+        await sleep(retryDelayMs(response, attempt));
         continue;
       }
       if (!response.ok) {
@@ -92,11 +115,7 @@ export function createTmdbClient(options: {
 
   return {
     async listMovieProviders() {
-      const data = await get(
-        "/watch/providers/movie",
-        { watch_region: "FR", language: "fr-FR" },
-        providersSchema,
-      );
+      const data = await get("/watch/providers/movie", { watch_region: "FR" }, providersSchema);
       return data.results;
     },
 
@@ -105,7 +124,6 @@ export function createTmdbClient(options: {
         "/discover/movie",
         {
           language: "fr-FR",
-          region: "FR",
           watch_region: "FR",
           with_watch_providers: providerIds.join("|"),
           // Included in the subscription, not rentals or purchases.
@@ -115,7 +133,9 @@ export function createTmdbClient(options: {
           with_origin_country: "FR",
           "vote_count.gte": String(minVoteCount),
           include_adult: "false",
-          sort_by: "popularity.desc",
+          // Stable order: popularity shifts between page fetches, which
+          // would skip films at page boundaries.
+          sort_by: "original_title.asc",
           page: String(page),
         },
         discoverSchema,
@@ -123,7 +143,7 @@ export function createTmdbClient(options: {
     },
 
     async getRuntime(movieId) {
-      const data = await get(`/movie/${movieId}`, { language: "fr-FR" }, movieDetailsSchema);
+      const data = await get(`/movie/${movieId}`, {}, movieDetailsSchema);
       return data.runtime && data.runtime > 0 ? data.runtime : null;
     },
   };
