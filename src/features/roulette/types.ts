@@ -42,7 +42,7 @@ export type CastVoteResult =
 
 export type MarkSeenResult =
   | { status: "relaunched"; spinId: string | null }
-  | { status: "closed" };
+  | { status: "closed" | "not_voter" };
 
 /** State returned by roulette server actions. */
 export type RouletteActionState = { error?: string };

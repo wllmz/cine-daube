@@ -18,23 +18,36 @@ afterEach(() => {
 
 describe("SpinReveal", () => {
   it("spins the wheel before revealing a new spin, then not again", () => {
-    const { unmount } = render(<SpinReveal spinId="spin-1">Opération Raclette</SpinReveal>);
+    const { unmount } = render(
+      <SpinReveal spinId="spin-1" announcement="Film tiré : Opération Raclette">
+        Fiche du film
+      </SpinReveal>,
+    );
     expect(screen.getByText("Ça tourne…")).toBeTruthy();
-    expect(screen.queryByText("Opération Raclette")).toBeNull();
+    expect(screen.queryByText("Fiche du film")).toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(2600);
     });
-    expect(screen.getByText("Opération Raclette")).toBeTruthy();
+    expect(screen.getByText("Fiche du film")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("Film tiré : Opération Raclette");
     unmount();
 
-    render(<SpinReveal spinId="spin-1">Opération Raclette</SpinReveal>);
-    expect(screen.getByText("Opération Raclette")).toBeTruthy();
+    render(
+      <SpinReveal spinId="spin-1" announcement="Film tiré : Opération Raclette">
+        Fiche du film
+      </SpinReveal>,
+    );
+    expect(screen.getByText("Fiche du film")).toBeTruthy();
   });
 
   it("skips the animation for users who prefer reduced motion", () => {
     mockReducedMotion(true);
-    render(<SpinReveal spinId="spin-2">Mariage à la plancha</SpinReveal>);
+    render(
+      <SpinReveal spinId="spin-2" announcement="Film tiré : Mariage à la plancha">
+        Mariage à la plancha
+      </SpinReveal>,
+    );
     expect(screen.getByText("Mariage à la plancha")).toBeTruthy();
   });
 });

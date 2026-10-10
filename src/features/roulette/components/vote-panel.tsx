@@ -44,6 +44,9 @@ export function VotePanel({ roomId, spinId, voters, currentUserId }: VotePanelPr
           {voters.map((voter) => (
             <li key={voter.userId} className="relative" title={`${voter.pseudo} : ${voter.vote ? VOTE_BADGE[voter.vote].label : "pas encore voté"}`}>
               <Avatar id={voter.userId} pseudo={voter.pseudo} size="sm" />
+              <span className="sr-only">
+                {voter.vote === "yes" ? " a voté oui" : voter.vote === "no" ? " a voté non" : " n'a pas encore voté"}
+              </span>
               <span
                 aria-hidden="true"
                 className={cn(
@@ -84,13 +87,15 @@ export function VotePanel({ roomId, spinId, voters, currentUserId }: VotePanelPr
         <p className="text-center text-[13px] text-muted">Tu n&apos;étais pas coché pour ce vote, regarde les autres décider.</p>
       )}
 
-      <Button variant="ghost" disabled={pending} onClick={() => run(() => markSeenAction(roomId, spinId))}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
-        Déjà vu · le retirer de la roulette
-      </Button>
+      {me && (
+        <Button variant="ghost" disabled={pending} onClick={() => run(() => markSeenAction(roomId, spinId))}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          Déjà vu · le retirer de la roulette
+        </Button>
+      )}
     </section>
   );
 }

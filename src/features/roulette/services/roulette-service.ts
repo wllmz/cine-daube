@@ -35,8 +35,9 @@ async function pickMovie(db: Database, roomId: string, now: Date): Promise<numbe
       and(
         eq(spins.roomId, roomId),
         eq(spins.movieId, movies.tmdbId),
+        // Ties are stored as rejected too: the tied film also sits out a day.
         eq(spins.status, "rejected"),
-        gt(spins.createdAt, new Date(now.getTime() - REJECTED_COOLDOWN_MS)),
+        gt(spins.resolvedAt, new Date(now.getTime() - REJECTED_COOLDOWN_MS)),
       ),
     );
 
@@ -49,11 +50,13 @@ async function pickMovie(db: Database, roomId: string, now: Date): Promise<numbe
   return movie?.tmdbId ?? null;
 }
 
-/** Inserts a voting spin and its voters. Returns null when the pool is empty. */
+/** Inserts a voting spin and its voters. Returns null when nothing can be drawn. */
 async function insertSpin(
   db: Database,
   input: { roomId: string; launchedBy: string; voterIds: string[]; now: Date },
 ): Promise<string | null> {
+  // No voters left (they all left the room): a spin nobody can vote on would block the room.
+  if (input.voterIds.length === 0) return null;
   const movieId = await pickMovie(db, input.roomId, input.now);
   if (movieId === null) return null;
 
@@ -89,10 +92,22 @@ export async function startSpin(
   const voterIds = [...new Set(input.voterIds)];
   if (voterIds.length === 0) throw new Error("A spin needs at least one voter");
 
+  const now = input.now ?? new Date();
   try {
-    const spinId = await db.transaction((tx) =>
-      insertSpin(tx, { roomId: input.roomId, launchedBy: input.userId, voterIds, now: input.now ?? new Date() }),
-    );
+    const spinId = await db.transaction(async (tx) => {
+      // A spin whose voters all left can never be resolved: close it instead
+      // of blocking the room forever.
+      const hasVoters = tx
+        .select({ one: sql`1` })
+        .from(spinVotes)
+        .where(eq(spinVotes.spinId, spins.id));
+      await tx
+        .update(spins)
+        .set({ status: "rejected", resolvedAt: now })
+        .where(and(eq(spins.roomId, input.roomId), eq(spins.status, "voting"), notExists(hasVoters)));
+
+      return insertSpin(tx, { roomId: input.roomId, launchedBy: input.userId, voterIds, now });
+    });
     return spinId ? { status: "started", spinId } : { status: "empty_pool" };
   } catch (error) {
     if (!isUniqueViolation(error, "spins_one_voting_per_room_idx")) throw error;
@@ -171,7 +186,10 @@ export async function castVote(
   });
 }
 
-/** "Déjà vu": removes the film from the room's pool and spins again. */
+/**
+ * "Déjà vu": removes the film from the room's pool and spins again. Only a
+ * voter of this spin may do it: members not here tonight don't decide.
+ */
 export async function markSeenAndRelaunch(
   db: Database,
   input: { spinId: string; roomId: string; userId: string; now?: Date },
@@ -181,18 +199,16 @@ export async function markSeenAndRelaunch(
     const spin = await lockVotingSpin(tx, input.spinId, input.roomId);
     if (!spin) return { status: "closed" };
 
+    const voterIds = await voterIdsOf(tx, spin.id);
+    if (!voterIds.includes(input.userId)) return { status: "not_voter" };
+
     await tx
       .insert(roomMovies)
       .values({ roomId: input.roomId, movieId: spin.movieId, status: "seen_before", spinId: spin.id })
       .onConflictDoNothing();
     await tx.update(spins).set({ status: "seen", resolvedAt: now }).where(eq(spins.id, spin.id));
 
-    const spinId = await insertSpin(tx, {
-      roomId: input.roomId,
-      launchedBy: input.userId,
-      voterIds: await voterIdsOf(tx, spin.id),
-      now,
-    });
+    const spinId = await insertSpin(tx, { roomId: input.roomId, launchedBy: input.userId, voterIds, now });
     return { status: "relaunched", spinId };
   });
 }

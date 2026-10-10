@@ -47,7 +47,18 @@ describe("startSpinAction", () => {
 
   it("turns a database refusal into a readable error", async () => {
     services.startSpin.mockRejectedValue(new Error("violates foreign key"));
-    expect((await startSpinAction(ROOM_ID, {}, voters(SARAH))).error).toContain("Impossible de lancer");
+    expect((await startSpinAction(ROOM_ID, {}, voters(SARAH))).error).toContain("ça a coincé");
+  });
+
+  it("tells the launcher a friend was faster", async () => {
+    services.startSpin.mockResolvedValue({ status: "already_voting", spinId: SPIN_ID });
+    expect((await startSpinAction(ROOM_ID, {}, voters(SARAH))).error).toContain("vient de lancer la roue");
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("caps the number of voters", async () => {
+    const tooMany = Array.from({ length: 51 }, () => SARAH);
+    expect((await startSpinAction(ROOM_ID, {}, voters(...tooMany))).error).toBe("Coche au moins une personne présente ce soir.");
   });
 });
 
@@ -65,7 +76,7 @@ describe("castVoteAction", () => {
 
   it.each([
     [{ status: "closed" }, "Ce vote est déjà terminé."],
-    [{ status: "not_voter" }, "Tu ne fais pas partie de ce vote."],
+    [{ status: "not_voter" }, "Tu n'étais pas coché pour ce vote."],
     [{ status: "voted", outcome: "tie", nextSpinId: null }, "Plus aucune comédie"],
   ])("explains %j", async (result, message) => {
     services.castVote.mockResolvedValue(result);
@@ -82,5 +93,15 @@ describe("markSeenAction", () => {
 
   it("rejects a malformed spin id", async () => {
     expect((await markSeenAction(ROOM_ID, "nope")).error).toBe("Film invalide.");
+  });
+
+  it("refuses members who are not voting tonight", async () => {
+    services.markSeenAndRelaunch.mockResolvedValue({ status: "not_voter" });
+    expect((await markSeenAction(ROOM_ID, SPIN_ID)).error).toBe("Tu n'étais pas coché pour ce vote.");
+  });
+
+  it("reports unexpected failures without crashing the page", async () => {
+    services.markSeenAndRelaunch.mockRejectedValue(new Error("db down"));
+    expect((await markSeenAction(ROOM_ID, SPIN_ID)).error).toContain("ça a coincé");
   });
 });

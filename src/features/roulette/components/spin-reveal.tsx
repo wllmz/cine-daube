@@ -32,26 +32,27 @@ function markSeen(spinId: string): boolean {
   }
 }
 
-function decide(spinId: string) {
-  if (phases.has(spinId)) return;
+/** Decides once per spin whether to play the wheel. Returns true if the phase changed. */
+function decide(spinId: string): boolean {
+  if (phases.has(spinId)) return false;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (markSeen(spinId) || reducedMotion) {
     phases.set(spinId, "done");
-    return;
+    return true;
   }
   phases.set(spinId, "spinning");
   window.setTimeout(() => {
     phases.set(spinId, "done");
     notify();
   }, SPIN_DURATION_MS);
+  return true;
 }
 
 function useSpinPhase(spinId: string): Phase {
   return useSyncExternalStore(
     (listener) => {
       listeners.add(listener);
-      decide(spinId);
-      notify();
+      if (decide(spinId)) notify();
       return () => listeners.delete(listener);
     },
     () => phases.get(spinId) ?? "unknown",
@@ -63,19 +64,30 @@ function useSpinPhase(spinId: string): Phase {
  * Plays the wheel the first time this tab sees a spin (the launcher, or
  * friends whose page refreshes onto it), then reveals the film.
  */
-export function SpinReveal({ spinId, children }: { spinId: string; children: ReactNode }) {
+type SpinRevealProps = {
+  spinId: string;
+  /** Read to screen readers once the wheel stops, e.g. "Film tiré : …". */
+  announcement: string;
+  children: ReactNode;
+};
+
+export function SpinReveal({ spinId, announcement, children }: SpinRevealProps) {
   const phase = useSpinPhase(spinId);
 
-  if (phase === "unknown") {
-    return <div aria-hidden="true" className="h-[420px]" />;
-  }
-  if (phase === "spinning") {
-    return (
-      <div className="flex flex-col items-center gap-5 py-6" role="status" aria-live="polite">
-        <RouletteWheel spinning />
-        <p className="text-xl font-extrabold tracking-tight">Ça tourne…</p>
-      </div>
-    );
-  }
-  return <div className="animate-fade-up">{children}</div>;
+  return (
+    <>
+      {/* One live region for the whole sequence, so the result is announced. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {phase === "spinning" ? "La roue tourne…" : phase === "done" ? announcement : ""}
+      </p>
+      {phase === "unknown" && <div aria-hidden="true" className="h-[420px]" />}
+      {phase === "spinning" && (
+        <div className="flex flex-col items-center gap-5 py-6" aria-hidden="true">
+          <RouletteWheel spinning />
+          <p className="text-xl font-extrabold tracking-tight">Ça tourne…</p>
+        </div>
+      )}
+      {phase === "done" && <div className="animate-fade-up">{children}</div>}
+    </>
+  );
 }

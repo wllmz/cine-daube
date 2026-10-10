@@ -6,6 +6,7 @@ import { BackLink } from "@/components/ui/back-link";
 import { buttonClassName } from "@/components/ui/button";
 import { Tomy } from "@/components/ui/tomy";
 import { getRoomMembers, requireRoomMember } from "@/features/rooms/server";
+import { AutoRefresh } from "@/features/roulette";
 import { getLatestRoomSpin } from "@/features/roulette/server";
 import { plural } from "@/lib/format";
 
@@ -79,6 +80,8 @@ async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
 export default function RoomPage({ params }: PageProps<"/rooms/[roomId]">) {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-5">
+      {/* Shows "Rejoindre le vote" as soon as a friend spins. */}
+      <AutoRefresh />
       <Suspense fallback={<div aria-hidden="true" className="h-[360px] animate-pulse rounded-3xl bg-chip" />}>
         <Lobby params={params} />
       </Suspense>

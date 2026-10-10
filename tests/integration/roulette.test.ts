@@ -87,6 +87,28 @@ describe("startSpin", () => {
     expect((await getLatestSpin(db, roomId))?.movie.tmdbId).toBe(3);
   });
 
+  it("keeps a rejected film out of the draw for 24 hours", async () => {
+    await pglite.query(`insert into room_movies (room_id, movie_id, status) values ('${roomId}', 2, 'watched'), ('${roomId}', 3, 'watched')`);
+    const spinId = await startedSpin([will]);
+    await vote(will, "no", spinId);
+
+    expect(await startSpin(db, { roomId, userId: will, voterIds: [will], now: new Date(NOW.getTime() + 23 * 3600_000) })).toEqual({
+      status: "empty_pool",
+    });
+    const later = await startSpin(db, { roomId, userId: will, voterIds: [will], now: new Date(NOW.getTime() + 25 * 3600_000) });
+    expect(later.status).toBe("started");
+  });
+
+  it("unblocks a room whose spin lost all its voters", async () => {
+    await startedSpin([julie]);
+    await pglite.query(`delete from auth.users where id = '${julie}'`);
+
+    const result = await startSpin(db, { roomId, userId: will, voterIds: [will], now: NOW });
+
+    expect(result.status).toBe("started");
+    expect(await rows(`select count(*)::int as n from spins where room_id = '${roomId}' and status = 'rejected'`)).toEqual([{ n: 1 }]);
+  });
+
   it("says when the pool is empty", async () => {
     await pglite.query(`insert into room_movies (room_id, movie_id, status) select '${roomId}', tmdb_id, 'watched' from movies`);
     expect(await startSpin(db, { roomId, userId: will, voterIds: [will], now: NOW })).toEqual({ status: "empty_pool" });
@@ -151,6 +173,8 @@ describe("castVote", () => {
     expect(await castVote(db, { spinId, roomId: otherRoom, userId: julie, vote: "yes" })).toEqual({ status: "closed" });
   });
 
+  // PGlite has a single connection, so transactions are serialised here: this
+  // checks the outcome logic, not the `for update` row lock itself.
   it("resolves concurrent votes exactly once", async () => {
     const spinId = await startedSpin([will, sarah, momo, julie]);
     const results = await Promise.all([vote(will, "yes", spinId), vote(sarah, "yes", spinId), vote(momo, "yes", spinId)]);
@@ -171,6 +195,13 @@ describe("markSeenAndRelaunch", () => {
     const next = await getLatestSpin(db, roomId);
     expect(next).toMatchObject({ status: "voting", launchedBy: "Sarah" });
     expect(next?.movie.tmdbId).not.toBe(seenMovie);
+  });
+
+  it("is reserved to the voters of the spin", async () => {
+    const spinId = await startedSpin([will, sarah]);
+    expect(await markSeenAndRelaunch(db, { spinId, roomId, userId: julie, now: NOW })).toEqual({ status: "not_voter" });
+    expect(await rows("select * from room_movies")).toEqual([]);
+    expect((await getLatestSpin(db, roomId))?.id).toBe(spinId);
   });
 
   it("does nothing once the vote is over", async () => {
