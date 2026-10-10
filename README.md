@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ciné Daube
 
-## Getting Started
+Les pires comédies françaises, notées entre potes. Une roulette live tire une comédie française dispo sur Netflix, Prime Video, Disney+ ou Canal+, la room vote, regarde, puis note l'humour et le scénario.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router), TypeScript strict, Tailwind CSS 4
+- Supabase : Postgres, Auth (email + mot de passe), Realtime (presence + broadcast)
+- Drizzle ORM pour les requêtes serveur et les migrations
+- Zod, React Query, React Hook Form, Zustand
+- Vitest + Testing Library
+- Catalogue de films : API TMDB
+
+## Démarrer
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Variables d'environnement
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+À mettre dans `.env.local` (jamais commité) :
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Où la trouver | Usage |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase › Project Settings › API | Client Supabase |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase › Project Settings › API Keys | Client Supabase |
+| `DATABASE_URL` | Supabase › Connect › Transaction pooler (port 6543) | Requêtes Drizzle au runtime |
+| `DATABASE_DIRECT_URL` | Supabase › Connect › Session pooler (port 5432) | Migrations `drizzle-kit` |
 
-## Learn More
+Les variables de l'app sont validées avec Zod dans `src/config/`, `DATABASE_DIRECT_URL` dans `drizzle.config.ts`.
 
-To learn more about Next.js, take a look at the following resources:
+### Base de données
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run db:generate   # génère une migration depuis src/db/schema.ts
+npm run db:migrate    # applique les migrations (DATABASE_DIRECT_URL)
+npm run db:studio     # explorer la base
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Toutes les tables ont la RLS activée sans policy : seule l'app (via Drizzle, côté serveur) y accède, la clé publique Supabase ne peut ni lire ni écrire.
 
-## Deploy on Vercel
+Les règles métier critiques sont garanties par la base (clés étrangères composites et checks) : un seul vote en cours par room, seuls les membres votent et notent, notes entre 0 et 10, impossible de noter un film « déjà vu », supprimer un compte ne détruit pas l'historique de la room. Elles sont couvertes par `tests/integration/schema.test.ts`, qui applique les migrations sur un Postgres en mémoire (PGlite).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Script | Rôle |
+| --- | --- |
+| `npm run dev` | Serveur de dev |
+| `npm run build` | Build de production |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | Vérification TypeScript |
+| `npm test` | Tests Vitest |
+
+## Structure
+
+```
+src/
+├── app/           # Routing uniquement
+├── features/      # Code métier par domaine (auth, rooms, catalog, roulette, ratings, realtime)
+├── components/ui/ # Primitives partagées (Button, Tomy…)
+├── db/            # Schéma Drizzle + client
+├── config/        # Validation des variables d'env
+└── lib/           # Helpers partagés (Supabase, format, utils)
+```
