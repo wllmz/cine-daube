@@ -5,24 +5,26 @@ import { AvatarStack } from "@/components/ui/avatar";
 import { BackLink } from "@/components/ui/back-link";
 import { buttonClassName } from "@/components/ui/button";
 import { Tomy } from "@/components/ui/tomy";
+import { getCurrentUser } from "@/features/auth/server";
+import { OnlineCount, RoomRealtime } from "@/features/realtime";
 import { getRoomMembers, requireRoomMember } from "@/features/rooms/server";
 import { AutoRefresh } from "@/features/roulette";
 import { getLatestRoomSpin } from "@/features/roulette/server";
-import { plural } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Room · Ciné Daube" };
 
 async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  const [room, members, spin] = await Promise.all([
+  const [room, members, spin, user] = await Promise.all([
     requireRoomMember(roomId),
     getRoomMembers(roomId),
     getLatestRoomSpin(roomId),
+    getCurrentUser(),
   ]);
   const voting = spin?.status === "voting";
 
   return (
-    <>
+    <RoomRealtime roomId={room.id} currentUserId={user.id}>
       <header className="flex items-center gap-1">
         <BackLink href="/rooms" label="Retour à mes rooms" />
         <h1 className="flex-1 truncate text-[22px] font-extrabold tracking-tight">{room.name}</h1>
@@ -40,7 +42,7 @@ async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
 
       <div className="flex items-center gap-2.5">
         <AvatarStack people={members.slice(0, 6).map(({ id, pseudo }) => ({ id, pseudo }))} />
-        <span className="text-[13px] text-muted">{plural(members.length, "membre")}</span>
+        <OnlineCount total={members.length} />
       </div>
 
       <section className="flex flex-col items-center gap-3 rounded-3xl border border-line bg-surface px-5 pt-6 pb-5 text-center shadow-card">
@@ -73,15 +75,15 @@ async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
           Tu es seul ici pour l&apos;instant : invite tes potes →
         </Link>
       )}
-    </>
+    </RoomRealtime>
   );
 }
 
 export default function RoomPage({ params }: PageProps<"/rooms/[roomId]">) {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-5">
-      {/* Shows "Rejoindre le vote" as soon as a friend spins. */}
-      <AutoRefresh />
+      {/* Realtime pushes changes; this slow poll only covers a dropped connection. */}
+      <AutoRefresh intervalMs={30_000} />
       <Suspense fallback={<div aria-hidden="true" className="h-[360px] animate-pulse rounded-3xl bg-chip" />}>
         <Lobby params={params} />
       </Suspense>

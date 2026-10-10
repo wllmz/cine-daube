@@ -11,7 +11,8 @@ import {
   VotePanel,
   type CurrentSpin,
 } from "@/features/roulette";
-import { getRouletteState } from "@/features/roulette/server";
+import { RoomRealtime } from "@/features/realtime";
+import { getRouletteState, type RouletteState } from "@/features/roulette/server";
 
 export const metadata: Metadata = { title: "Roulette · Ciné Daube" };
 
@@ -34,7 +35,15 @@ function whereToWatch(spin: CurrentSpin): string {
 
 async function Roulette({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  const { room, members, currentUserId, spin } = await getRouletteState(roomId);
+  const state = await getRouletteState(roomId);
+  return (
+    <RoomRealtime roomId={state.room.id} currentUserId={state.currentUserId}>
+      <RouletteScreen {...state} />
+    </RoomRealtime>
+  );
+}
+
+function RouletteScreen({ room, members, currentUserId, spin }: RouletteState) {
 
   const header = (
     <header className="flex items-center gap-1">
@@ -118,8 +127,8 @@ async function Roulette({ params }: { params: Promise<{ roomId: string }> }) {
 export default function RoulettePage({ params }: PageProps<"/rooms/[roomId]/roulette">) {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-5">
-      {/* Every state can change because of a friend: launch, votes, relaunch. */}
-      <AutoRefresh />
+      {/* Realtime pushes launches and votes; this slow poll only covers a dropped connection. */}
+      <AutoRefresh intervalMs={30_000} />
       <Suspense fallback={<div aria-hidden="true" className="h-[420px] animate-pulse rounded-3xl bg-chip" />}>
         <Roulette params={params} />
       </Suspense>
