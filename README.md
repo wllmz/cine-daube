@@ -29,6 +29,18 @@ npm run dev
 | `DATABASE_URL` | Supabase › Connect › Transaction pooler (port 6543) | Requêtes Drizzle au runtime |
 | `DATABASE_DIRECT_URL` | Supabase › Connect › Session pooler (port 5432) | Migrations `drizzle-kit` |
 | `SITE_URL` | URL publique de l'app (`http://localhost:3000` en dev) | Liens envoyés par email |
+| `TMDB_API_TOKEN` | themoviedb.org › Settings › API › « API Read Access Token » | Synchro du catalogue |
+| `CRON_SECRET` | Chaîne aléatoire (≥ 16 caractères) | Protège la route du cron |
+
+### Catalogue de films
+
+Les comédies françaises disponibles sur Netflix, Prime Video, Disney+ et Canal+ (abonnement, région FR, au moins 20 votes TMDB) sont synchronisées chaque nuit par Vercel Cron (`vercel.json`) via `/api/cron/sync-catalog`. Pour lancer une synchro à la main en local (serveur de dev démarré) :
+
+```bash
+node -e "process.loadEnvFile('.env.local');fetch('http://localhost:3000/api/cron/sync-catalog',{headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(r=>r.json()).then(console.log)"
+```
+
+Les plateformes sont résolues par leur nom TMDB (`src/features/catalog/providers.ts`) : si TMDB renomme une plateforme, la synchro échoue sans toucher au catalogue existant.
 
 ### Auth Supabase
 
