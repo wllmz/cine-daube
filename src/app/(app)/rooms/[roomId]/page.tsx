@@ -3,15 +3,23 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AvatarStack } from "@/components/ui/avatar";
 import { BackLink } from "@/components/ui/back-link";
+import { buttonClassName } from "@/components/ui/button";
 import { Tomy } from "@/components/ui/tomy";
 import { getRoomMembers, requireRoomMember } from "@/features/rooms/server";
+import { AutoRefresh } from "@/features/roulette";
+import { getLatestRoomSpin } from "@/features/roulette/server";
 import { plural } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Room · Ciné Daube" };
 
 async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  const [room, members] = await Promise.all([requireRoomMember(roomId), getRoomMembers(roomId)]);
+  const [room, members, spin] = await Promise.all([
+    requireRoomMember(roomId),
+    getRoomMembers(roomId),
+    getLatestRoomSpin(roomId),
+  ]);
+  const voting = spin?.status === "voting";
 
   return (
     <>
@@ -39,8 +47,22 @@ async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
         <Tomy mood="choque" size={112} />
         <h2 className="text-[22px] font-extrabold tracking-tight">La roulette de la honte</h2>
         <p className="text-sm leading-relaxed text-muted">
-          Bientôt ici : une comédie française tirée au sort parmi Netflix, Prime Video, Disney+ et Canal+.
+          {voting
+            ? `Un vote est en cours sur « ${spin.movie.title} ».`
+            : "Une comédie française au hasard, dispo sur une de ces plateformes."}
         </p>
+        {!voting && (
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {["Netflix", "Prime Video", "Disney+", "Canal+"].map((platform) => (
+              <span key={platform} className="rounded-full bg-chip px-2.5 py-1 text-xs font-semibold text-ink-soft">
+                {platform}
+              </span>
+            ))}
+          </div>
+        )}
+        <Link href={`/rooms/${room.id}/roulette`} className={buttonClassName("primary", "mt-2 w-full")}>
+          {voting ? "Rejoindre le vote" : "Lancer la roulette"}
+        </Link>
       </section>
 
       {members.length === 1 && (
@@ -58,6 +80,8 @@ async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
 export default function RoomPage({ params }: PageProps<"/rooms/[roomId]">) {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-5">
+      {/* Shows "Rejoindre le vote" as soon as a friend spins. */}
+      <AutoRefresh />
       <Suspense fallback={<div aria-hidden="true" className="h-[360px] animate-pulse rounded-3xl bg-chip" />}>
         <Lobby params={params} />
       </Suspense>
