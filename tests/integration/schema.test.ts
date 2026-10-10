@@ -201,16 +201,22 @@ describe("database schema", () => {
       expect(await pseudoOf(U1)).toBe("Will");
     });
 
-    it("falls back to the email local part, trimmed and truncated", async () => {
+    it("strips control characters and truncates to 30 characters", async () => {
       await db.exec(`
         insert into auth.users (id, email, raw_user_meta_data)
-        values ('${NEW_USER}', '${"a".repeat(40)}@example.com', '{"pseudo": "   "}')
+        values ('${NEW_USER}', 'x@example.com', '{"pseudo": "  Le\\tRoi\\n${"x".repeat(40)}  "}')
       `);
-      expect(await pseudoOf(NEW_USER)).toBe("a".repeat(30));
+      expect(await pseudoOf(NEW_USER)).toBe(`LeRoi${"x".repeat(25)}`);
     });
 
-    it("never lets a signup fail on missing metadata", async () => {
-      await db.exec(`insert into auth.users (id) values ('${NEW_USER}')`);
+    it.each([
+      ["a blank pseudo", `'{"pseudo": " \\n "}'`],
+      ["missing metadata", "null"],
+    ])("falls back to Anonyme on %s, never on the email", async (_label, metadata) => {
+      await db.exec(`
+        insert into auth.users (id, email, raw_user_meta_data)
+        values ('${NEW_USER}', 'secret.name@example.com', ${metadata})
+      `);
       expect(await pseudoOf(NEW_USER)).toBe("Anonyme");
     });
 
