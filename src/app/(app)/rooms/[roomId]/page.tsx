@@ -5,8 +5,7 @@ import { AvatarStack } from "@/components/ui/avatar";
 import { BackLink } from "@/components/ui/back-link";
 import { buttonClassName } from "@/components/ui/button";
 import { Tomy } from "@/components/ui/tomy";
-import { getCurrentUser } from "@/features/auth/server";
-import { OnlineCount, RoomRealtime } from "@/features/realtime";
+import { OnlineCount } from "@/features/realtime";
 import { getRoomMembers, requireRoomMember } from "@/features/rooms/server";
 import { AutoRefresh } from "@/features/roulette";
 import { getLatestRoomSpin } from "@/features/roulette/server";
@@ -15,16 +14,15 @@ export const metadata: Metadata = { title: "Room · Ciné Daube" };
 
 async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  const [room, members, spin, user] = await Promise.all([
+  const [room, members, spin] = await Promise.all([
     requireRoomMember(roomId),
     getRoomMembers(roomId),
     getLatestRoomSpin(roomId),
-    getCurrentUser(),
   ]);
   const voting = spin?.status === "voting";
 
   return (
-    <RoomRealtime roomId={room.id} currentUserId={user.id}>
+    <>
       <header className="flex items-center gap-1">
         <BackLink href="/rooms" label="Retour à mes rooms" />
         <h1 className="flex-1 truncate text-[22px] font-extrabold tracking-tight">{room.name}</h1>
@@ -75,7 +73,7 @@ async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
           Tu es seul ici pour l&apos;instant : invite tes potes →
         </Link>
       )}
-    </RoomRealtime>
+    </>
   );
 }
 

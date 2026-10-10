@@ -21,10 +21,17 @@ type LaunchFormProps = {
  * phone for the whole couch is fine).
  */
 export function LaunchForm(props: LaunchFormProps) {
-  const { onlineIds, ready } = useRoomPresence();
-  // Defaults are applied once presence is known: remount at that moment.
-  const online = ready ? props.members.filter((member) => onlineIds.has(member.id)).map((member) => member.id) : [];
-  const defaults = new Set(online.length > 0 ? online : props.members.map((member) => member.id));
+  const { onlineIds, ready, currentUserId } = useRoomPresence();
+  // Until presence is known, everyone is checked. Then the members online,
+  // plus the launcher: the first presence snapshot may not include our own
+  // tracking yet. Remounting applies the new defaults once.
+  const defaults = new Set(
+    ready
+      ? props.members
+          .filter((member) => member.id === currentUserId || onlineIds.has(member.id))
+          .map((member) => member.id)
+      : props.members.map((member) => member.id),
+  );
 
   return <LaunchFormFields key={ready ? "presence" : "initial"} {...props} defaults={defaults} onlineIds={onlineIds} />;
 }

@@ -11,7 +11,6 @@ import {
   VotePanel,
   type CurrentSpin,
 } from "@/features/roulette";
-import { RoomRealtime } from "@/features/realtime";
 import { getRouletteState, type RouletteState } from "@/features/roulette/server";
 
 export const metadata: Metadata = { title: "Roulette · Ciné Daube" };
@@ -35,12 +34,7 @@ function whereToWatch(spin: CurrentSpin): string {
 
 async function Roulette({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  const state = await getRouletteState(roomId);
-  return (
-    <RoomRealtime roomId={state.room.id} currentUserId={state.currentUserId}>
-      <RouletteScreen {...state} />
-    </RoomRealtime>
-  );
+  return <RouletteScreen {...await getRouletteState(roomId)} />;
 }
 
 function RouletteScreen({ room, members, currentUserId, spin }: RouletteState) {
