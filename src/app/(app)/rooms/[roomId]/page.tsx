@@ -1,23 +1,29 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AvatarStack } from "@/components/ui/avatar";
 import { BackLink } from "@/components/ui/back-link";
 import { buttonClassName } from "@/components/ui/button";
 import { Tomy } from "@/components/ui/tomy";
+import { tmdbPosterUrl } from "@/features/catalog";
+import { RoomTabs } from "@/features/ratings";
+import { getNextToRate } from "@/features/ratings/server";
 import { OnlineCount } from "@/features/realtime";
 import { getRoomMembers, requireRoomMember } from "@/features/rooms/server";
 import { AutoRefresh } from "@/features/roulette";
 import { getLatestRoomSpin } from "@/features/roulette/server";
+import { plural } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Room · Ciné Daube" };
 
 async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  const [room, members, spin] = await Promise.all([
+  const [room, members, spin, toRate] = await Promise.all([
     requireRoomMember(roomId),
     getRoomMembers(roomId),
     getLatestRoomSpin(roomId),
+    getNextToRate(roomId),
   ]);
   const voting = spin?.status === "voting";
 
@@ -37,6 +43,8 @@ async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
           </svg>
         </Link>
       </header>
+
+      <RoomTabs roomId={room.id} active="lobby" />
 
       <div className="flex items-center gap-2.5">
         <AvatarStack people={members.slice(0, 6).map(({ id, pseudo }) => ({ id, pseudo }))} />
@@ -64,6 +72,33 @@ async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
           {voting ? "Rejoindre le vote" : "Lancer la roulette"}
         </Link>
       </section>
+
+      {toRate && (
+        <section className="flex flex-col gap-2.5">
+          <h2 className="text-[13px] font-semibold text-muted">À noter</h2>
+          <Link
+            href={`/rooms/${room.id}/movies/${toRate.tmdbId}/rate`}
+            className="flex items-center gap-3.5 rounded-[18px] bg-subtle p-3 transition hover:bg-chip"
+          >
+            <span className="relative h-16 w-[46px] shrink-0 overflow-hidden rounded-[10px] bg-chip">
+              {toRate.posterPath && (
+                <Image src={tmdbPosterUrl(toRate.posterPath, "w185")} alt="" fill sizes="46px" unoptimized className="object-cover" />
+              )}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+              <strong className="truncate text-[15px] font-bold">{toRate.title}</strong>
+              <span className="text-xs text-muted">
+                {toRate.summary.count > 0
+                  ? `${plural(toRate.summary.count, "note")}, il manque la tienne`
+                  : "Personne ne l'a encore noté"}
+              </span>
+            </span>
+            <span className="rounded-[10px] bg-surface px-3.5 py-2 text-sm font-semibold shadow-[0_1px_3px_rgb(24_24_27/0.1)]">
+              Noter
+            </span>
+          </Link>
+        </section>
+      )}
 
       {members.length === 1 && (
         <Link
