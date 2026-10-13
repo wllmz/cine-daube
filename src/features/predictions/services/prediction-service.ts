@@ -298,9 +298,13 @@ function revealPredictions(
   votes: { predictionId: string; userId: string; vote: VoteValue }[],
   viewerId: string,
 ): PredictionAuthor[] {
+  const votesByPrediction = new Map<string, typeof votes>();
+  for (const vote of votes) {
+    votesByPrediction.set(vote.predictionId, [...(votesByPrediction.get(vote.predictionId) ?? []), vote]);
+  }
   const authors = new Map<string, PredictionAuthor>();
   for (const { userId, pseudo, ...prediction } of rows) {
-    const onThis = votes.filter((v) => v.predictionId === prediction.id);
+    const onThis = votesByPrediction.get(prediction.id) ?? [];
     const author = authors.get(userId) ?? { userId, pseudo, points: 0, predictions: [] };
     author.predictions.push({
       ...prediction,

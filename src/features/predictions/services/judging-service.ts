@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, exists, gt, isNull, lte, ne, notExists, sql } from "drizzle-orm";
+import { and, desc, eq, exists, gt, inArray, isNull, lte, ne, notExists, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import { movies, predictionVotes, predictions, roomMovies, spinVotes } from "@/db/schema";
 import { resolveVote } from "@/features/roulette/vote";
@@ -71,6 +71,7 @@ export async function castPredictionVote(
       .select({ vote: predictionVotes.vote })
       .from(predictionVotes)
       .where(eq(predictionVotes.predictionId, input.predictionId));
+    // A participant who left the room no longer counts (their votes leave with them).
     const validated = verdictOf({
       eligible: participants.filter((id) => id !== prediction.authorId).length,
       yes: votes.filter((v) => v.vote === "yes").length,
@@ -89,13 +90,11 @@ export async function castPredictionVote(
 /**
  * Judges the room's predictions whose voting time is over, with the votes
  * cast (majority of yes; tie or no vote = no point). Called before reading.
+ * Locks them first, then counts in a new statement: a vote committed while
+ * waiting for the lock is counted (one statement would use an older snapshot).
  */
 export async function settleExpiredPredictions(db: Database, input: { roomId: string; now: Date }): Promise<void> {
   const cutoff = new Date(input.now.getTime() - JUDGING_TTL_MS);
-  const castFor = (onlyYes: boolean) =>
-    sql`(select count(*) from ${predictionVotes} where ${predictionVotes.predictionId} = ${predictions.id}${
-      onlyYes ? sql` and ${predictionVotes.vote} = 'yes'` : sql``
-    })`;
   const filmOver = db
     .select({ one: sql`1` })
     .from(roomMovies)
@@ -106,10 +105,31 @@ export async function settleExpiredPredictions(db: Database, input: { roomId: st
         lte(roomMovies.finishedAt, cutoff),
       ),
     );
-  await db
-    .update(predictions)
-    .set({ validated: sql`${castFor(true)} * 2 > ${castFor(false)}`, judgedAt: input.now })
-    .where(and(eq(predictions.roomId, input.roomId), isNull(predictions.validated), exists(filmOver)));
+  const castFor = (onlyYes: boolean) =>
+    sql`(select count(*) from ${predictionVotes} where ${predictionVotes.predictionId} = ${predictions.id}${
+      onlyYes ? sql` and ${predictionVotes.vote} = 'yes'` : sql``
+    })`;
+
+  await db.transaction(async (tx) => {
+    const due = await tx
+      .select({ id: predictions.id })
+      .from(predictions)
+      .where(and(eq(predictions.roomId, input.roomId), isNull(predictions.validated), exists(filmOver)))
+      .for("no key update", { of: predictions });
+    if (due.length === 0) return;
+    await tx
+      .update(predictions)
+      .set({ validated: sql`${castFor(true)} * 2 > ${castFor(false)}`, judgedAt: input.now })
+      .where(
+        and(
+          inArray(
+            predictions.id,
+            due.map((row) => row.id),
+          ),
+          isNull(predictions.validated),
+        ),
+      );
+  });
 }
 
 /** The latest finished film whose predictions still wait for this member's votes. */

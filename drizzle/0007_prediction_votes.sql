@@ -16,6 +16,17 @@ ALTER TABLE "prediction_votes" ADD CONSTRAINT "prediction_votes_prediction_fk" F
 ALTER TABLE "prediction_votes" ADD CONSTRAINT "prediction_votes_member_fk" FOREIGN KEY ("room_id","user_id") REFERENCES "public"."room_members"("room_id","user_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "prediction_votes_member_idx" ON "prediction_votes" USING btree ("room_id","user_id");--> statement-breakpoint
 ALTER TABLE "predictions" ADD CONSTRAINT "predictions_judged_at_set" CHECK (("predictions"."validated" is null) = ("predictions"."judged_at" is null));--> statement-breakpoint
+-- Predictions made before judging existed were never voted on: they are closed
+-- without a point (decided with the room's admin), instead of being judged by accident.
+UPDATE "predictions" SET "validated" = false, "judged_at" = now()
+WHERE "validated" IS NULL
+  AND EXISTS (
+    SELECT 1 FROM "room_movies" AS rm
+    WHERE rm."room_id" = "predictions"."room_id"
+      AND rm."movie_id" = "predictions"."movie_id"
+      AND rm."finished_at" IS NOT NULL
+  );
+--> statement-breakpoint
 -- Votes and verdicts change the film's results: tell the room.
 DROP TRIGGER IF EXISTS prediction_votes_notify_room ON public.prediction_votes;
 --> statement-breakpoint

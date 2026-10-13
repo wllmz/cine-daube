@@ -148,6 +148,26 @@ describe("settleExpiredPredictions", () => {
     ]);
   });
 
+  it("counts a vote cast just before the deadline", async () => {
+    await finishFilm();
+    await vote(momo, clavier, "no", minutesLater(19));
+    await vote(will, clavier, "yes", minutesLater(19.9));
+    await settleExpiredPredictions(db, { roomId, now: minutesLater(20) });
+    // 1 yes, 1 no: a tie, no point; both votes were counted.
+    expect(await verdict(clavier)).toBe(false);
+    expect(
+      (await board(will, minutesLater(20)))?.revealed.find((a) => a.pseudo === "Sarah")?.predictions[0],
+    ).toMatchObject({ yes: 1, no: 1, validated: false });
+  });
+
+  it("gives no point to a member who watched alone: nobody can judge", async () => {
+    await pglite.query("delete from spin_votes where user_id <> $1", [will]);
+    await finishFilm();
+    expect(await vote(sarah, piscine, "yes")).toEqual({ status: "not_voter" });
+    await settleExpiredPredictions(db, { roomId, now: minutesLater(20) });
+    expect(await verdict(piscine)).toBe(false);
+  });
+
   it("leaves films still on alone", async () => {
     await settleExpiredPredictions(db, { roomId, now: minutesLater(60) });
     expect(await verdict(piscine)).toBeNull();

@@ -1,6 +1,7 @@
 import "server-only";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
+import { cache } from "react";
 import { getDb } from "@/db";
 import { getCurrentUser } from "@/features/auth/server";
 import { movieIdSchema } from "@/features/ratings/schemas";
@@ -17,15 +18,16 @@ import type { FilmInProgress, FilmToJudge, PendingFinishVote, PredictionBoard } 
 /**
  * Votes expire, so these reads depend on the current time (always at request
  * time) and first settle the votes past their delay: the room sees a film
- * end on time without anyone clicking again.
+ * end on time without anyone clicking again. Once per request: the layout
+ * and the page both read through here.
  */
-async function settleExpired(roomId: string): Promise<Date> {
+const settleExpired = cache(async (roomId: string): Promise<Date> => {
   await connection();
   const now = new Date();
   await settleExpiredFinishVotes(getDb(), { roomId, now });
   await settleExpiredPredictions(getDb(), { roomId, now });
   return now;
-}
+});
 
 /** The film's predictions as the current member may see them, or a 404. */
 export async function requirePredictionBoard(roomId: string, movieId: string): Promise<PredictionBoard> {

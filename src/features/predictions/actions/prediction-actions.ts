@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/features/auth/server";
 import { movieIdSchema } from "@/features/ratings/schemas";
 import { requireRoomMember } from "@/features/rooms/server";
 import { MAX_PREDICTIONS } from "../rules";
-import { voteValueSchema, predictionContentSchema, predictionIdSchema, proposalIdSchema } from "../schemas";
+import { predictionContentSchema, predictionIdSchema, proposalIdSchema, voteValueSchema } from "../schemas";
 import { castPredictionVote } from "../services/judging-service";
 import { addPrediction, castFinishVote, deletePrediction, proposeFinish } from "../services/prediction-service";
 import type { PredictionActionState } from "../types";
