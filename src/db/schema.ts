@@ -43,6 +43,7 @@ export const roomMovieStatus = pgEnum("room_movie_status", [
   "watched",
   "seen_before",
 ]);
+export const finishStatus = pgEnum("finish_status", ["voting", "accepted", "rejected"]);
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -197,6 +198,8 @@ export const roomMovies = pgTable(
     status: roomMovieStatus("status").notNull(),
     spinId: uuid("spin_id"),
     createdAt: createdAt(),
+    // Set when the room votes the watched film finished: predictions close and are revealed.
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (t) => [
     primaryKey({ columns: [t.roomId, t.movieId] }),
@@ -210,6 +213,7 @@ export const roomMovies = pgTable(
     index("room_movies_spin_idx").on(t.spinId),
     // Target for the ratings foreign key (only watched movies can be rated).
     unique("room_movies_room_movie_status_unique").on(t.roomId, t.movieId, t.status),
+    check("room_movies_finished_when_watched", sql`${t.finishedAt} is null or ${t.status} = 'watched'`),
   ],
 ).enableRLS();
 
@@ -254,5 +258,93 @@ export const ratings = pgTable(
       "ratings_acting_range",
       sql`${t.acting} is null or ${t.acting} between 0 and 10`,
     ),
+  ],
+).enableRLS();
+
+/** A member's guess about a film the room is watching (actors, scenes…), hidden until the film is finished. */
+export const predictions = pgTable(
+  "predictions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roomId: uuid("room_id").notNull(),
+    movieId: integer("movie_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    // Always 'watched': lets the foreign key reject movies marked "déjà vu".
+    movieStatus: roomMovieStatus("movie_status").notNull().default("watched"),
+    content: text("content").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: "predictions_room_movie_fk",
+      columns: [t.roomId, t.movieId, t.movieStatus],
+      foreignColumns: [roomMovies.roomId, roomMovies.movieId, roomMovies.status],
+    }).onDelete("no action"),
+    foreignKey({
+      name: "predictions_member_fk",
+      columns: [t.roomId, t.userId],
+      foreignColumns: [roomMembers.roomId, roomMembers.userId],
+    }).onDelete("cascade"),
+    index("predictions_room_movie_idx").on(t.roomId, t.movieId),
+    index("predictions_member_idx").on(t.roomId, t.userId),
+    check("predictions_movie_watched", sql`${t.movieStatus} = 'watched'`),
+    check("predictions_content_length", sql`char_length(${t.content}) between 1 and 140`),
+  ],
+).enableRLS();
+
+/** "Film terminé ?" vote on a film the room is watching. */
+export const finishProposals = pgTable(
+  "finish_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roomId: uuid("room_id").notNull(),
+    movieId: integer("movie_id").notNull(),
+    proposedBy: uuid("proposed_by").references(() => profiles.id, { onDelete: "set null" }),
+    status: finishStatus("status").notNull().default("voting"),
+    createdAt: createdAt(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (t) => [
+    foreignKey({
+      name: "finish_proposals_room_movie_fk",
+      columns: [t.roomId, t.movieId],
+      foreignColumns: [roomMovies.roomId, roomMovies.movieId],
+    }).onDelete("cascade"),
+    // At most one vote in progress per film.
+    uniqueIndex("finish_proposals_one_voting_idx")
+      .on(t.roomId, t.movieId)
+      .where(sql`${t.status} = 'voting'`),
+    unique("finish_proposals_id_room_unique").on(t.id, t.roomId),
+    check(
+      "finish_proposals_resolved_when_not_voting",
+      sql`(${t.status} = 'voting') = (${t.resolvedAt} is null)`,
+    ),
+  ],
+).enableRLS();
+
+/** One row per voter (the film's roulette voters), created with the proposal. */
+export const finishVotes = pgTable(
+  "finish_votes",
+  {
+    proposalId: uuid("proposal_id").notNull(),
+    roomId: uuid("room_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    vote: voteValue("vote"),
+    votedAt: timestamp("voted_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.proposalId, t.userId] }),
+    foreignKey({
+      name: "finish_votes_proposal_fk",
+      columns: [t.proposalId, t.roomId],
+      foreignColumns: [finishProposals.id, finishProposals.roomId],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "finish_votes_member_fk",
+      columns: [t.roomId, t.userId],
+      foreignColumns: [roomMembers.roomId, roomMembers.userId],
+    }).onDelete("cascade"),
+    index("finish_votes_member_idx").on(t.roomId, t.userId),
+    check("finish_votes_voted_at_set", sql`(${t.vote} is null) = (${t.votedAt} is null)`),
   ],
 ).enableRLS();
