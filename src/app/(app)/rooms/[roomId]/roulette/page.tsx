@@ -90,8 +90,8 @@ function RouletteScreen({ room, members, currentUserId, spin }: RouletteState) {
               </span>
             </p>
             <MovieCard movie={spin.movie} />
-            <Link href={`/rooms/${room.id}/movies/${spin.movie.tmdbId}/rate`} className={buttonClassName("primary")}>
-              Film terminé ? On le note
+            <Link href={`/rooms/${room.id}/movies/${spin.movie.tmdbId}`} className={buttonClassName("primary")}>
+              Faire mes prédictions
             </Link>
             {/* The accepted film counts as watched: this starts the next movie night. */}
             <details className="rounded-[14px] border border-line p-3.5">

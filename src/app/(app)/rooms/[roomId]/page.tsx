@@ -7,6 +7,7 @@ import { BackLink } from "@/components/ui/back-link";
 import { buttonClassName } from "@/components/ui/button";
 import { Tomy } from "@/components/ui/tomy";
 import { tmdbPosterUrl } from "@/features/catalog";
+import { getFilmInProgress } from "@/features/predictions/server";
 import { RoomTabs } from "@/features/ratings";
 import { getNextToRate } from "@/features/ratings/server";
 import { OnlineCount } from "@/features/realtime";
@@ -19,13 +20,16 @@ export const metadata: Metadata = { title: "Room · Ciné Daube" };
 
 async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  const [room, members, spin, toRate] = await Promise.all([
+  const [room, members, spin, nextToRate, inProgress] = await Promise.all([
     requireRoomMember(roomId),
     getRoomMembers(roomId),
     getLatestRoomSpin(roomId),
     getNextToRate(roomId),
+    getFilmInProgress(roomId),
   ]);
   const voting = spin?.status === "voting";
+  // A film still on is rated once it is finished.
+  const toRate = nextToRate?.tmdbId === inProgress?.tmdbId ? null : nextToRate;
 
   return (
     <>
@@ -72,6 +76,29 @@ async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
           {voting ? "Rejoindre le vote" : "Lancer la roulette"}
         </Link>
       </section>
+
+      {inProgress && (
+        <section className="flex flex-col gap-2.5">
+          <h2 className="text-[13px] font-semibold text-muted">Séance en cours</h2>
+          <Link
+            href={`/rooms/${room.id}/movies/${inProgress.tmdbId}`}
+            className="flex items-center gap-3.5 rounded-[18px] bg-accent-soft p-3 transition hover:bg-[#fbe4e0]"
+          >
+            <span className="relative h-16 w-[46px] shrink-0 overflow-hidden rounded-[10px] bg-chip">
+              {inProgress.posterPath && (
+                <Image src={tmdbPosterUrl(inProgress.posterPath, "w185")} alt="" fill sizes="46px" unoptimized className="object-cover" />
+              )}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+              <strong className="truncate text-[15px] font-bold">{inProgress.title}</strong>
+              <span className="text-xs text-muted">Prédictions ouvertes jusqu&apos;à la fin du film</span>
+            </span>
+            <span className="rounded-[10px] bg-surface px-3.5 py-2 text-sm font-semibold shadow-[0_1px_3px_rgb(24_24_27/0.1)]">
+              Prédire
+            </span>
+          </Link>
+        </section>
+      )}
 
       {toRate && (
         <section className="flex flex-col gap-2.5">
