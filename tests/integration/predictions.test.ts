@@ -228,7 +228,7 @@ describe("Film terminé ?", () => {
   it("ends a forgotten film when the room accepts the next one", async () => {
     await predict(will, "Piscine");
     const forgotten = await proposed(will);
-    await pglite.query("insert into movies (tmdb_id, title, tmdb_rating, tmdb_vote_count) values (5, 'Film 5', 3, 100)");
+    await pglite.query("insert into movies (tmdb_id, title, tmdb_rating, tmdb_vote_count) values (5, 'Film 5', 6, 100)");
     await pglite.query("insert into movie_providers (movie_id, provider) values (5, 'netflix')");
 
     const spin = await startSpin(db, { roomId, userId: will, voterIds: [will], now: minutesLater(5) });
