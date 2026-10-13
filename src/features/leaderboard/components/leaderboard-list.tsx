@@ -14,15 +14,18 @@ export function LeaderboardList({ entries, currentUserId }: { entries: Leaderboa
         return (
           <li
             key={entry.userId}
+            aria-current={isMe ? "true" : undefined}
             className={cn("flex items-center gap-3 rounded-[16px] px-3 py-2.5", isMe ? "bg-accent-soft" : "bg-subtle")}
           >
-            <span className="w-7 text-center text-base font-extrabold" aria-label={`${entry.rank}e`}>
-              {entry.points > 0 && PODIUM[entry.rank] ? PODIUM[entry.rank] : entry.rank}
+            <span className="w-7 text-center text-base font-extrabold">
+              <span aria-hidden="true">{entry.points > 0 && PODIUM[entry.rank] ? PODIUM[entry.rank] : entry.rank}</span>
+              <span className="sr-only">{entry.rank === 1 ? "1er" : `${entry.rank}e`}</span>
             </span>
             <Avatar id={entry.userId} pseudo={entry.pseudo} size="sm" />
             <span className="flex min-w-0 flex-1 flex-col">
-              <strong className="truncate text-[15px] font-bold" aria-hidden="true">
-                {entry.pseudo}
+              <strong className="truncate text-[15px] font-bold">
+                {/* The avatar already reads the pseudo out. */}
+                <span aria-hidden="true">{entry.pseudo}</span>
                 {isMe && <span className="font-semibold text-muted"> · toi</span>}
               </strong>
               <span className="text-xs text-muted">

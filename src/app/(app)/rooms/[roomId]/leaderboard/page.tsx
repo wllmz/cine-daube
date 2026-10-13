@@ -9,6 +9,9 @@ import { requireRoomMember } from "@/features/rooms/server";
 
 export const metadata: Metadata = { title: "Classement · Ciné Daube" };
 
+// "Will, Sarah et Momo" when several members share the lead.
+const names = new Intl.ListFormat("fr", { type: "conjunction" });
+
 async function Leaderboard({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
   const [room, { entries, currentUserId }] = await Promise.all([requireRoomMember(roomId), getLeaderboard(roomId)]);
@@ -28,10 +31,7 @@ async function Leaderboard({ params }: { params: Promise<{ roomId: string }> }) 
           <span className="flex flex-1 flex-col gap-0.5">
             <span className="text-xs font-bold text-accent-strong">Madame Irma de la room</span>
             <strong className="text-base leading-tight font-bold">
-              {entries
-                .filter((entry) => entry.rank === 1)
-                .map((entry) => entry.pseudo)
-                .join(" et ")}
+              {names.format(entries.filter((entry) => entry.rank === 1).map((entry) => entry.pseudo))}
             </strong>
           </span>
           <span className="text-[26px] font-extrabold tracking-tight text-accent">{leader.points}</span>

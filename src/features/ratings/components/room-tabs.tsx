@@ -17,7 +17,7 @@ export function RoomTabs({ roomId, active }: { roomId: string; active: "lobby" |
           href={tab.href}
           aria-current={tab.key === active ? "page" : undefined}
           className={cn(
-            "flex h-10 items-center justify-center rounded-[9px] text-sm font-semibold transition",
+            "flex h-10 min-w-0 items-center justify-center rounded-[9px] px-1 text-[13px] font-semibold whitespace-nowrap transition sm:text-sm",
             tab.key === active ? "bg-surface text-ink shadow-[0_1px_3px_rgb(24_24_27/0.1)]" : "text-muted hover:text-ink",
           )}
         >
