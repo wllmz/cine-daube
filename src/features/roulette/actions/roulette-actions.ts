@@ -13,7 +13,7 @@ const idSchema = z.uuid();
 const votersSchema = z.array(idSchema).min(1).max(50);
 const voteSchema = z.enum(["yes", "no"]);
 
-const EMPTY_POOL = "Plus aucune comédie à tirer : vous avez tout vu, ou tout recalé ces dernières 24 h.";
+const EMPTY_POOL = "Plus aucune comédie à tirer : vous avez tout vu, tout recalé ces dernières 24 h, ou il ne reste que des films trop mal notés.";
 const CLOSED = "Ce vote est déjà terminé.";
 const NOT_VOTER = "Tu n'étais pas coché pour ce vote.";
 const FAILED = "Oups, ça a coincé. Recharge la page et réessaie.";

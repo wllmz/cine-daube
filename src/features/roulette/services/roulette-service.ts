@@ -17,6 +17,7 @@ import type {
 const REJECTED_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 // Below this TMDB score a film is too painful to sit through, even for us.
+// Compared as a parameter typed like the `real` column: a float8 cast would drop films rated exactly 5.7.
 const MIN_TMDB_RATING = 5.7;
 
 /**
