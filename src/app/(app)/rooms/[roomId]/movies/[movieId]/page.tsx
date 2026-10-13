@@ -103,7 +103,7 @@ async function MovieDetailView({ params }: { params: Promise<{ roomId: string; m
 
       <MemberRatings ratings={movie.ratings} />
 
-      {board.finishedAt && <RevealedPredictions authors={board.revealed} />}
+      {board.finishedAt && <RevealedPredictions roomId={roomId} board={board} currentUserId={user.id} />}
     </>
   );
 }

@@ -1,9 +1,10 @@
 import "server-only";
 import { and, asc, count, desc, eq, gt, isNull, lte, ne } from "drizzle-orm";
 import type { Database } from "@/db";
-import { finishProposals, finishVotes, movies, predictions, profiles, roomMovies, spinVotes } from "@/db/schema";
+import { finishProposals, finishVotes, movies, predictionVotes, predictions, profiles, roomMovies, spinVotes } from "@/db/schema";
+import type { VoteValue } from "@/features/roulette/types";
 import { resolveVote } from "@/features/roulette/vote";
-import { FINISH_VOTE_TTL_MS, MAX_PREDICTIONS, isFinishVoteExpired } from "../rules";
+import { FINISH_VOTE_TTL_MS, MAX_PREDICTIONS, isFinishVoteExpired, isJudgingOver, judgingEndsAt } from "../rules";
 import type {
   AddPredictionResult,
   CastFinishVoteResult,
@@ -282,16 +283,39 @@ export async function castFinishVote(
   });
 }
 
-function groupByAuthor(
-  rows: { userId: string; pseudo: string; id: string; content: string; createdAt: Date }[],
+type RevealedRow = {
+  userId: string;
+  pseudo: string;
+  id: string;
+  content: string;
+  createdAt: Date;
+  validated: boolean | null;
+};
+
+/** Everyone's predictions with the room's votes, grouped by author (best scorer first). */
+function revealPredictions(
+  rows: RevealedRow[],
+  votes: { predictionId: string; userId: string; vote: VoteValue }[],
+  viewerId: string,
 ): PredictionAuthor[] {
+  const votesByPrediction = new Map<string, typeof votes>();
+  for (const vote of votes) {
+    votesByPrediction.set(vote.predictionId, [...(votesByPrediction.get(vote.predictionId) ?? []), vote]);
+  }
   const authors = new Map<string, PredictionAuthor>();
   for (const { userId, pseudo, ...prediction } of rows) {
-    const author = authors.get(userId) ?? { userId, pseudo, predictions: [] };
-    author.predictions.push(prediction);
+    const onThis = votesByPrediction.get(prediction.id) ?? [];
+    const author = authors.get(userId) ?? { userId, pseudo, points: 0, predictions: [] };
+    author.predictions.push({
+      ...prediction,
+      yes: onThis.filter((v) => v.vote === "yes").length,
+      no: onThis.filter((v) => v.vote === "no").length,
+      myVote: onThis.find((v) => v.userId === viewerId)?.vote ?? null,
+    });
+    if (prediction.validated) author.points += 1;
     authors.set(userId, author);
   }
-  return [...authors.values()];
+  return [...authors.values()].sort((a, b) => b.points - a.points);
 }
 
 async function currentFinishVote(db: Database, input: FilmKey): Promise<FinishVote | null> {
@@ -329,7 +353,7 @@ async function currentFinishVote(db: Database, input: FilmKey): Promise<FinishVo
  */
 export async function getPredictionBoard(
   db: Database,
-  input: FilmKey & { userId: string },
+  input: FilmKey & { userId: string; now: Date },
 ): Promise<PredictionBoard | null> {
   const [film] = await db
     .select({
@@ -370,6 +394,7 @@ export async function getPredictionBoard(
         pseudo: profiles.pseudo,
         content: predictions.content,
         createdAt: predictions.createdAt,
+        validated: predictions.validated,
       })
       .from(predictions)
       .innerJoin(profiles, eq(profiles.id, predictions.userId))
@@ -377,18 +402,28 @@ export async function getPredictionBoard(
       .orderBy(asc(profiles.pseudo), asc(predictions.createdAt)),
     film.finishedAt ? Promise.resolve(null) : currentFinishVote(db, input),
   ]);
+  const votes = film.finishedAt
+    ? await db
+        .select({ predictionId: predictionVotes.predictionId, userId: predictionVotes.userId, vote: predictionVotes.vote })
+        .from(predictionVotes)
+        .innerJoin(predictions, eq(predictions.id, predictionVotes.predictionId))
+        .where(own)
+    : [];
+  const isParticipant = participants.some((p) => p.userId === input.userId);
 
   const toPrediction = ({ id, content, createdAt }: (typeof rows)[number]): Prediction => ({ id, content, createdAt });
   return {
     movie: { tmdbId: film.tmdbId, title: film.title, posterPath: film.posterPath },
     finishedAt: film.finishedAt,
-    isParticipant: participants.some((p) => p.userId === input.userId),
+    isParticipant,
     participants: participants.map((p) => ({
       ...p,
       predictionCount: counts.find((c) => c.userId === p.userId)?.total ?? 0,
     })),
     myPredictions: rows.filter((row) => row.userId === input.userId).map(toPrediction),
-    revealed: film.finishedAt ? groupByAuthor(rows) : [],
+    revealed: film.finishedAt ? revealPredictions(rows, votes, input.userId) : [],
+    judgingEndsAt: film.finishedAt ? judgingEndsAt(film.finishedAt) : null,
+    canJudge: isParticipant && film.finishedAt !== null && !isJudgingOver(film.finishedAt, input.now),
     finishVote,
   };
 }

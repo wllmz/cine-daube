@@ -6,10 +6,20 @@ export type Prediction = {
   createdAt: Date;
 };
 
+/** A prediction once the film is over, with the room's votes on it. */
+export type JudgedPrediction = Prediction & {
+  /** True = validated (1 point), false = missed, null = still being judged. */
+  validated: boolean | null;
+  yes: number;
+  no: number;
+  myVote: VoteValue | null;
+};
+
 export type PredictionAuthor = {
   userId: string;
   pseudo: string;
-  predictions: Prediction[];
+  points: number;
+  predictions: JudgedPrediction[];
 };
 
 export type FinishVoter = {
@@ -35,6 +45,10 @@ export type PredictionBoard = {
   myPredictions: Prediction[];
   /** Everyone's predictions, only once the film is finished. */
   revealed: PredictionAuthor[];
+  /** When the votes on predictions close (null while the film is on). */
+  judgingEndsAt: Date | null;
+  /** The member can still vote on the others' predictions. */
+  canJudge: boolean;
   finishVote: FinishVote | null;
 };
 
@@ -51,6 +65,15 @@ export type FilmInProgress = {
   title: string;
   posterPath: string | null;
 };
+
+/** A finished film whose predictions wait for the member's votes. */
+export type FilmToJudge = FilmInProgress;
+
+export type PredictionVerdict = "pending" | "validated" | "rejected";
+
+export type CastPredictionVoteResult =
+  | { status: "voted"; verdict: PredictionVerdict }
+  | { status: "not_found" | "not_finished" | "closed" | "own_prediction" | "not_voter" };
 
 export type FinishOutcome = "pending" | "accepted" | "rejected";
 

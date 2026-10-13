@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   foreignKey,
   index,
@@ -273,6 +274,9 @@ export const predictions = pgTable(
     movieStatus: roomMovieStatus("movie_status").notNull().default("watched"),
     content: text("content").notNull(),
     createdAt: createdAt(),
+    // The room's verdict once the film is over: true = 1 point. Null while it is judged.
+    validated: boolean("validated"),
+    judgedAt: timestamp("judged_at", { withTimezone: true }),
   },
   (t) => [
     foreignKey({
@@ -289,6 +293,9 @@ export const predictions = pgTable(
     index("predictions_member_idx").on(t.roomId, t.userId),
     check("predictions_movie_watched", sql`${t.movieStatus} = 'watched'`),
     check("predictions_content_length", sql`char_length(${t.content}) between 1 and 140`),
+    check("predictions_judged_at_set", sql`(${t.validated} is null) = (${t.judgedAt} is null)`),
+    // Target for the prediction votes' foreign key.
+    unique("predictions_id_room_unique").on(t.id, t.roomId),
   ],
 ).enableRLS();
 
@@ -346,5 +353,31 @@ export const finishVotes = pgTable(
     }).onDelete("cascade"),
     index("finish_votes_member_idx").on(t.roomId, t.userId),
     check("finish_votes_voted_at_set", sql`(${t.vote} is null) = (${t.votedAt} is null)`),
+  ],
+).enableRLS();
+
+/** A member's verdict on someone else's prediction, once the film is finished. */
+export const predictionVotes = pgTable(
+  "prediction_votes",
+  {
+    predictionId: uuid("prediction_id").notNull(),
+    roomId: uuid("room_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    vote: voteValue("vote").notNull(),
+    votedAt: timestamp("voted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.predictionId, t.userId] }),
+    foreignKey({
+      name: "prediction_votes_prediction_fk",
+      columns: [t.predictionId, t.roomId],
+      foreignColumns: [predictions.id, predictions.roomId],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "prediction_votes_member_fk",
+      columns: [t.roomId, t.userId],
+      foreignColumns: [roomMembers.roomId, roomMembers.userId],
+    }).onDelete("cascade"),
+    index("prediction_votes_member_idx").on(t.roomId, t.userId),
   ],
 ).enableRLS();

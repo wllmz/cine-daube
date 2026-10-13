@@ -9,16 +9,22 @@ const service = {
   proposeFinish: vi.fn(),
   castFinishVote: vi.fn(),
 };
+const judging = { castPredictionVote: vi.fn() };
 
 vi.mock("@/db", () => ({ getDb: () => "db" }));
 vi.mock("@/features/auth/server", () => ({ getCurrentUser: async () => ({ id: "user-1" }) }));
 vi.mock("@/features/rooms/server", () => ({ requireRoomMember: async (id: string) => ({ id }) }));
 vi.mock("next/cache", () => ({ refresh: vi.fn() }));
 vi.mock("../services/prediction-service", () => service);
+vi.mock("../services/judging-service", () => judging);
 
-const { addPredictionAction, castFinishVoteAction, deletePredictionAction, proposeFinishAction } = await import(
-  "./prediction-actions"
-);
+const {
+  addPredictionAction,
+  castFinishVoteAction,
+  castPredictionVoteAction,
+  deletePredictionAction,
+  proposeFinishAction,
+} = await import("./prediction-actions");
 
 function form(content?: string): FormData {
   const data = new FormData();
@@ -90,5 +96,33 @@ describe("finish vote actions", () => {
   it("tells a late voter the vote is over", async () => {
     service.castFinishVote.mockResolvedValue({ status: "closed" });
     expect((await castFinishVoteAction(ROOM_ID, PROPOSAL_ID, "yes")).error).toBe("Ce vote est déjà terminé.");
+  });
+});
+
+describe("castPredictionVoteAction", () => {
+  it("records the current member's verdict", async () => {
+    judging.castPredictionVote.mockResolvedValue({ status: "voted", verdict: "pending" });
+    expect(await castPredictionVoteAction(ROOM_ID, PROPOSAL_ID, "yes")).toEqual({});
+    expect(judging.castPredictionVote).toHaveBeenCalledWith("db", {
+      roomId: ROOM_ID,
+      predictionId: PROPOSAL_ID,
+      userId: "user-1",
+      vote: "yes",
+    });
+  });
+
+  it.each([
+    ["own_prediction", "tes propres prédictions"],
+    ["closed", "sont terminés"],
+    ["not_finished", "Attends la fin du film"],
+  ])("explains %s", async (status, message) => {
+    judging.castPredictionVote.mockResolvedValue({ status });
+    expect((await castPredictionVoteAction(ROOM_ID, PROPOSAL_ID, "no")).error).toContain(message);
+  });
+
+  it("rejects an invalid id or vote", async () => {
+    expect((await castPredictionVoteAction(ROOM_ID, "nope", "yes")).error).toBe("Vote invalide.");
+    expect((await castPredictionVoteAction(ROOM_ID, PROPOSAL_ID, "peut-être")).error).toBe("Vote invalide.");
+    expect(judging.castPredictionVote).not.toHaveBeenCalled();
   });
 });

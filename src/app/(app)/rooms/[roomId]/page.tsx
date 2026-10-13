@@ -7,7 +7,7 @@ import { BackLink } from "@/components/ui/back-link";
 import { buttonClassName } from "@/components/ui/button";
 import { Tomy } from "@/components/ui/tomy";
 import { tmdbPosterUrl } from "@/features/catalog";
-import { getFilmInProgress } from "@/features/predictions/server";
+import { getFilmInProgress, getFilmToJudge } from "@/features/predictions/server";
 import { RoomTabs } from "@/features/ratings";
 import { getNextToRate } from "@/features/ratings/server";
 import { OnlineCount } from "@/features/realtime";
@@ -20,12 +20,13 @@ export const metadata: Metadata = { title: "Room · Ciné Daube" };
 
 async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  const [room, members, spin, toRate, inProgress] = await Promise.all([
+  const [room, members, spin, toRate, inProgress, toJudge] = await Promise.all([
     requireRoomMember(roomId),
     getRoomMembers(roomId),
     getLatestRoomSpin(roomId),
     getNextToRate(roomId),
     getFilmInProgress(roomId),
+    getFilmToJudge(roomId),
   ]);
   const voting = spin?.status === "voting";
 
@@ -93,6 +94,29 @@ async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
             </span>
             <span className="rounded-[10px] bg-surface px-3.5 py-2 text-sm font-semibold shadow-[0_1px_3px_rgb(24_24_27/0.1)]">
               Prédire
+            </span>
+          </Link>
+        </section>
+      )}
+
+      {toJudge && (
+        <section className="flex flex-col gap-2.5">
+          <h2 className="text-[13px] font-semibold text-muted">Prédictions à juger</h2>
+          <Link
+            href={`/rooms/${room.id}/movies/${toJudge.tmdbId}`}
+            className="flex items-center gap-3.5 rounded-[18px] bg-accent-soft p-3 transition hover:bg-[#fbe4e0]"
+          >
+            <span className="relative h-16 w-[46px] shrink-0 overflow-hidden rounded-[10px] bg-chip">
+              {toJudge.posterPath && (
+                <Image src={tmdbPosterUrl(toJudge.posterPath, "w185")} alt="" fill sizes="46px" unoptimized className="object-cover" />
+              )}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+              <strong className="truncate text-[15px] font-bold">{toJudge.title}</strong>
+              <span className="text-xs text-muted">Vrai ou faux ? Chaque prédiction juste rapporte 1 point</span>
+            </span>
+            <span className="rounded-[10px] bg-surface px-3.5 py-2 text-sm font-semibold shadow-[0_1px_3px_rgb(24_24_27/0.1)]">
+              Juger
             </span>
           </Link>
         </section>
