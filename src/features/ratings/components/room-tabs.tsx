@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-/** "Soirée / Films vus" switch between the room's lobby and its watched films. */
-export function RoomTabs({ roomId, active }: { roomId: string; active: "lobby" | "movies" }) {
+/** "Soirée / Films vus / Classement" switch between the room's sections. */
+export function RoomTabs({ roomId, active }: { roomId: string; active: "lobby" | "movies" | "leaderboard" }) {
   const tabs = [
     { key: "lobby", href: `/rooms/${roomId}`, label: "Soirée" },
     { key: "movies", href: `/rooms/${roomId}/movies`, label: "Films vus" },
+    { key: "leaderboard", href: `/rooms/${roomId}/leaderboard`, label: "Classement" },
   ] as const;
 
   return (
-    <nav aria-label="Sections de la room" className="grid grid-cols-2 gap-1 rounded-xl bg-chip p-1">
+    <nav aria-label="Sections de la room" className="grid grid-cols-3 gap-1 rounded-xl bg-chip p-1">
       {tabs.map((tab) => (
         <Link
           key={tab.key}

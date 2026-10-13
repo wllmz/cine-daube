@@ -21,7 +21,7 @@ import type { FilmInProgress, FilmToJudge, PendingFinishVote, PredictionBoard } 
  * end on time without anyone clicking again. Once per request: the layout
  * and the page both read through here.
  */
-const settleExpired = cache(async (roomId: string): Promise<Date> => {
+export const settleExpired = cache(async (roomId: string): Promise<Date> => {
   await connection();
   const now = new Date();
   await settleExpiredFinishVotes(getDb(), { roomId, now });

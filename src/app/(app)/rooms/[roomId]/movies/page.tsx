@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { BackLink } from "@/components/ui/back-link";
 import { Tomy } from "@/components/ui/tomy";
+import { getMyPointsByMovie } from "@/features/leaderboard/server";
 import { requireRoomMember } from "@/features/rooms/server";
 import { MovieRow, RoomTabs, sortByScore, type MovieSort } from "@/features/ratings";
 import { getWatchedMovies } from "@/features/ratings/server";
@@ -35,7 +36,11 @@ async function Movies({
 }) {
   const [{ roomId }, query] = await Promise.all([params, searchParams]);
   const sort: MovieSort = SORTS.find((s) => s.key === query.sort)?.key ?? "worst";
-  const [room, { movies, stats }] = await Promise.all([requireRoomMember(roomId), getWatchedMovies(roomId)]);
+  const [room, { movies, stats }, myPoints] = await Promise.all([
+    requireRoomMember(roomId),
+    getWatchedMovies(roomId),
+    getMyPointsByMovie(roomId),
+  ]);
   const sorted = sortByScore(movies, sort);
 
   return (
@@ -96,7 +101,7 @@ async function Movies({
           <ol className="-mx-2.5 flex flex-col gap-0.5">
             {sorted.map((movie, index) => (
               <li key={movie.tmdbId}>
-                <MovieRow roomId={room.id} movie={movie} rank={index + 1} />
+                <MovieRow roomId={room.id} movie={movie} rank={index + 1} points={myPoints.get(movie.tmdbId)} />
               </li>
             ))}
           </ol>
