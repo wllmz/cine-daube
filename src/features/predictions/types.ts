@@ -23,8 +23,6 @@ export type FinishVote = {
   proposalId: string;
   proposedBy: string | null;
   createdAt: Date;
-  /** Past the delay: the next proposal settles it with the votes cast. */
-  expired: boolean;
   voters: FinishVoter[];
 };
 

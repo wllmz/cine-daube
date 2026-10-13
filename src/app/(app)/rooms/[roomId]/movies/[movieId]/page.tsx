@@ -95,9 +95,11 @@ async function MovieDetailView({ params }: { params: Promise<{ roomId: string; m
         )}
       </section>
 
-      <Link href={`/rooms/${roomId}/movies/${movie.tmdbId}/rate`} className={buttonClassName(movie.myScores ? "secondary" : "primary")}>
-        {movie.myScores ? "Modifier ma note" : "Noter ce film"}
-      </Link>
+      {board.finishedAt && (
+        <Link href={`/rooms/${roomId}/movies/${movie.tmdbId}/rate`} className={buttonClassName(movie.myScores ? "secondary" : "primary")}>
+          {movie.myScores ? "Modifier ma note" : "Noter ce film"}
+        </Link>
+      )}
 
       <MemberRatings ratings={movie.ratings} />
 

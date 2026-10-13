@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, exists, gt, notExists, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import { isUniqueViolation } from "@/db/errors";
+import { finishFilmsInProgress } from "@/features/predictions/services/prediction-service";
 import { movieProviders, movies, profiles, roomMovies, spinVotes, spins } from "@/db/schema";
 import { resolveVote } from "../vote";
 import type {
@@ -167,7 +168,9 @@ export async function castVote(
       .where(eq(spins.id, spin.id));
 
     if (outcome === "accepted") {
-      // The room watches it now: out of the pool, and ratable.
+      // A new movie night: the previous film is over, its predictions revealed.
+      await finishFilmsInProgress(tx, { roomId: input.roomId, exceptMovieId: spin.movieId, now });
+      // The room watches it now: out of the pool, predictions open until it is finished.
       await tx
         .insert(roomMovies)
         .values({ roomId: input.roomId, movieId: spin.movieId, status: "watched", spinId: spin.id })

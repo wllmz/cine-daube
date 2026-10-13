@@ -17,11 +17,9 @@ type FinishVotePanelProps = {
 };
 
 /** "Film terminé ?": propose the end, or answer the vote in progress. */
-export function FinishVotePanel({ roomId, movieId, finishVote, currentUserId, isParticipant }: FinishVotePanelProps) {
+export function FinishVotePanel({ roomId, movieId, finishVote: open, currentUserId, isParticipant }: FinishVotePanelProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string>();
-  // An expired vote no longer waits for anyone: proposing again settles it.
-  const open = finishVote && !finishVote.expired ? finishVote : null;
   const me = open?.voters.find((voter) => voter.userId === currentUserId);
 
   function run(action: () => Promise<{ error?: string }>) {

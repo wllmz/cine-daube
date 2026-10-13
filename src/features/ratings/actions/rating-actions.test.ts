@@ -84,6 +84,13 @@ describe("rateMovieAction", () => {
     expect(saveRating.mock.calls[0]?.[1].scores).toEqual({ humour: 0, scenario: 0, acting: null });
   });
 
+  it("waits for the end of the film", async () => {
+    saveRating.mockResolvedValue("not_finished");
+    expect((await rateMovieAction(ROOM_ID, "42", {}, form({ humour: "3", scenario: "2" }))).error).toBe(
+      "Attends la fin du film pour le noter.",
+    );
+  });
+
   it("explains a film the room did not watch", async () => {
     saveRating.mockRejectedValue({ code: "23503", constraint_name: "ratings_room_movie_fk" });
     expect((await rateMovieAction(ROOM_ID, "42", {}, form({ humour: "3", scenario: "2" }))).error).toContain(

@@ -11,8 +11,10 @@ import {
   getPredictionBoard,
   listPendingFinishVotes,
   proposeFinish,
+  settleExpiredFinishVotes,
 } from "@/features/predictions/services/prediction-service";
 import { createRoom, joinRoom } from "@/features/rooms/services/room-service";
+import { castVote, startSpin } from "@/features/roulette/services/roulette-service";
 import { createTestDatabase, createUser } from "../helpers/test-database";
 
 const NOW = new Date("2026-10-13T21:00:00Z");
@@ -53,7 +55,7 @@ async function watch(movieId: number, voterIds: string[]) {
 }
 
 const predict = (userId: string, content: string, movieId = FILM) => addPrediction(db, { roomId, movieId, userId, content });
-const board = (userId: string, now = NOW) => getPredictionBoard(db, { roomId, movieId: FILM, userId, now });
+const board = (userId: string) => getPredictionBoard(db, { roomId, movieId: FILM, userId });
 const propose = (userId: string, now = NOW) => proposeFinish(db, { roomId, movieId: FILM, userId, now });
 const vote = (userId: string, proposalId: string, value: "yes" | "no", now = NOW) =>
   castFinishVote(db, { roomId, proposalId, userId, vote: value, now });
@@ -182,20 +184,61 @@ describe("Film terminé ?", () => {
     expect(await listPendingFinishVotes(db, { roomId, userId: sarah, now: minutesLater(20) })).toEqual([]);
   });
 
-  it("ignores missing votes after 20 minutes", async () => {
-    const proposalId = await proposed(will);
-    expect((await board(will, minutesLater(20)))?.finishVote?.expired).toBe(true);
+  it("ignores missing votes after 20 minutes, without anyone clicking again", async () => {
+    // The review's scenario: 2 "yes" out of 4 participants, 2 never answer.
+    await watch(2, [will, sarah, momo, julie]);
+    const started = await proposeFinish(db, { roomId, movieId: 2, userId: will, now: NOW });
+    if (started.status !== "proposed") throw new Error("Expected a proposal");
+    await vote(sarah, started.proposalId, "yes");
 
-    // Only Will answered: proposing again settles the old vote with the votes cast.
+    await settleExpiredFinishVotes(db, { roomId, now: minutesLater(19) });
+    expect((await getPredictionBoard(db, { roomId, movieId: 2, userId: will }))?.finishedAt).toBeNull();
+
+    await settleExpiredFinishVotes(db, { roomId, now: minutesLater(20) });
+    expect((await getPredictionBoard(db, { roomId, movieId: 2, userId: will }))?.finishedAt).toEqual(minutesLater(20));
+    expect(await vote(momo, started.proposalId, "no", minutesLater(21))).toEqual({ status: "closed" });
+  });
+
+  it("goes on when an expired vote has more no than yes", async () => {
+    await watch(2, [will, sarah, momo, julie]);
+    const started = await proposeFinish(db, { roomId, movieId: 2, userId: will, now: NOW });
+    if (started.status !== "proposed") throw new Error("Expected a proposal");
+    await vote(sarah, started.proposalId, "no");
+    await vote(momo, started.proposalId, "no");
+
+    await settleExpiredFinishVotes(db, { roomId, now: minutesLater(30) });
+    expect((await getPredictionBoard(db, { roomId, movieId: 2, userId: will }))).toMatchObject({
+      finishedAt: null,
+      finishVote: null,
+    });
+  });
+
+  it("settles an expired vote still open when someone proposes again", async () => {
+    await proposed(will);
     expect(await propose(sarah, minutesLater(21))).toEqual({ status: "finished" });
     expect((await board(will))?.finishedAt).toEqual(minutesLater(21));
-    expect(await vote(momo, proposalId, "no", minutesLater(22))).toEqual({ status: "closed" });
   });
 
   it("settles an expired vote on the next answer too", async () => {
     const proposalId = await proposed(will);
     expect(await vote(sarah, proposalId, "no", minutesLater(25))).toEqual({ status: "voted", outcome: "rejected" });
     expect((await board(will))?.finishedAt).toBeNull();
+  });
+
+  it("ends a forgotten film when the room accepts the next one", async () => {
+    await predict(will, "Piscine");
+    const forgotten = await proposed(will);
+    await pglite.query("insert into movies (tmdb_id, title, tmdb_rating, tmdb_vote_count) values (5, 'Film 5', 3, 100)");
+    await pglite.query("insert into movie_providers (movie_id, provider) values (5, 'netflix')");
+
+    const spin = await startSpin(db, { roomId, userId: will, voterIds: [will], now: minutesLater(5) });
+    if (spin.status !== "started") throw new Error("Expected a spin");
+    await castVote(db, { spinId: spin.spinId, roomId, userId: will, vote: "yes", now: minutesLater(6) });
+
+    expect((await board(sarah))?.finishedAt).toEqual(minutesLater(6));
+    expect((await board(sarah))?.revealed.map((a) => a.pseudo)).toEqual(["Will"]);
+    expect(await vote(sarah, forgotten, "yes")).toEqual({ status: "closed" });
+    expect(await findFilmInProgress(db, roomId)).toMatchObject({ tmdbId: 5 });
   });
 
   it("finishes at once when the proposer watched alone", async () => {

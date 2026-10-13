@@ -20,7 +20,7 @@ export const metadata: Metadata = { title: "Room · Ciné Daube" };
 
 async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  const [room, members, spin, nextToRate, inProgress] = await Promise.all([
+  const [room, members, spin, toRate, inProgress] = await Promise.all([
     requireRoomMember(roomId),
     getRoomMembers(roomId),
     getLatestRoomSpin(roomId),
@@ -28,8 +28,6 @@ async function Lobby({ params }: { params: Promise<{ roomId: string }> }) {
     getFilmInProgress(roomId),
   ]);
   const voting = spin?.status === "voting";
-  // A film still on is rated once it is finished.
-  const toRate = nextToRate?.tmdbId === inProgress?.tmdbId ? null : nextToRate;
 
   return (
     <>

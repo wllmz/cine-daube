@@ -9,6 +9,8 @@ export type WatchedMovie = {
   posterPath: string | null;
   providers: StreamingProvider[];
   watchedAt: Date;
+  /** Null while the room is still watching it: predictions open, no rating yet. */
+  finishedAt: Date | null;
   summary: ScoreSummary;
   ratedByMe: boolean;
 };

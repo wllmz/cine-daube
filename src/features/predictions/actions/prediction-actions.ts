@@ -29,7 +29,7 @@ export async function addPredictionAction(
   const { room, user } = await memberContext(roomId);
   const parsedMovie = movieIdSchema.safeParse(String(movieId));
   if (!parsedMovie.success) return { error: NOT_FOUND };
-  const content = predictionContentSchema.safeParse(formData.get("content") ?? "");
+  const content = predictionContentSchema.safeParse(formData.get("content") ?? undefined);
   if (!content.success) return { error: content.error.issues[0]?.message };
 
   const result = await addPrediction(getDb(), {

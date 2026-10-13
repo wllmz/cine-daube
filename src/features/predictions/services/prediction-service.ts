@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, isNull, lte, ne } from "drizzle-orm";
 import type { Database } from "@/db";
 import { finishProposals, finishVotes, movies, predictions, profiles, roomMovies, spinVotes } from "@/db/schema";
 import { resolveVote } from "@/features/roulette/vote";
@@ -30,7 +30,8 @@ async function lockFilm(db: Database, { roomId, movieId }: FilmKey) {
     .select({ spinId: roomMovies.spinId, finishedAt: roomMovies.finishedAt })
     .from(roomMovies)
     .where(and(eq(roomMovies.roomId, roomId), eq(roomMovies.movieId, movieId), eq(roomMovies.status, "watched")))
-    .for("update");
+    // finished_at is not a key column: ratings' foreign key checks are not blocked.
+    .for("no key update");
   return film ?? null;
 }
 
@@ -173,6 +174,75 @@ export async function proposeFinish(
   });
 }
 
+/**
+ * Settles the room's "Film terminé ?" votes past their delay with the votes
+ * cast, so a film ends on time even if nobody clicks again. Called before
+ * reading, safe to run concurrently (each vote is re-checked under the lock).
+ */
+export async function settleExpiredFinishVotes(db: Database, input: { roomId: string; now: Date }): Promise<void> {
+  const expired = await db
+    .select({ id: finishProposals.id, movieId: finishProposals.movieId })
+    .from(finishProposals)
+    .where(
+      and(
+        eq(finishProposals.roomId, input.roomId),
+        eq(finishProposals.status, "voting"),
+        lte(finishProposals.createdAt, new Date(input.now.getTime() - FINISH_VOTE_TTL_MS)),
+      ),
+    );
+  for (const proposal of expired) {
+    await db.transaction(async (tx) => {
+      await lockFilm(tx, { roomId: input.roomId, movieId: proposal.movieId });
+      const [current] = await tx
+        .select({ status: finishProposals.status })
+        .from(finishProposals)
+        .where(eq(finishProposals.id, proposal.id));
+      if (current?.status !== "voting") return;
+      await settleProposal(tx, {
+        roomId: input.roomId,
+        movieId: proposal.movieId,
+        proposalId: proposal.id,
+        expired: true,
+        now: input.now,
+      });
+    });
+  }
+}
+
+/**
+ * A new film was accepted at the roulette: the films still on are over,
+ * so their predictions are revealed instead of staying hidden forever.
+ */
+export async function finishFilmsInProgress(
+  db: Database,
+  input: { roomId: string; exceptMovieId: number; now: Date },
+): Promise<void> {
+  const finished = await db
+    .update(roomMovies)
+    .set({ finishedAt: input.now })
+    .where(
+      and(
+        eq(roomMovies.roomId, input.roomId),
+        eq(roomMovies.status, "watched"),
+        isNull(roomMovies.finishedAt),
+        ne(roomMovies.movieId, input.exceptMovieId),
+      ),
+    )
+    .returning({ movieId: roomMovies.movieId });
+  for (const { movieId } of finished) {
+    await db
+      .update(finishProposals)
+      .set({ status: "accepted", resolvedAt: input.now })
+      .where(
+        and(
+          eq(finishProposals.roomId, input.roomId),
+          eq(finishProposals.movieId, movieId),
+          eq(finishProposals.status, "voting"),
+        ),
+      );
+  }
+}
+
 /** Records a voter's answer (it can change until the vote is settled). */
 export async function castFinishVote(
   db: Database,
@@ -224,7 +294,7 @@ function groupByAuthor(
   return [...authors.values()];
 }
 
-async function currentFinishVote(db: Database, input: FilmKey & { now: Date }): Promise<FinishVote | null> {
+async function currentFinishVote(db: Database, input: FilmKey): Promise<FinishVote | null> {
   const [proposal] = await db
     .select({ id: finishProposals.id, createdAt: finishProposals.createdAt, proposedBy: profiles.pseudo })
     .from(finishProposals)
@@ -249,7 +319,6 @@ async function currentFinishVote(db: Database, input: FilmKey & { now: Date }): 
     proposalId: proposal.id,
     proposedBy: proposal.proposedBy,
     createdAt: proposal.createdAt,
-    expired: isFinishVoteExpired(proposal.createdAt, input.now),
     voters,
   };
 }
@@ -260,7 +329,7 @@ async function currentFinishVote(db: Database, input: FilmKey & { now: Date }): 
  */
 export async function getPredictionBoard(
   db: Database,
-  input: FilmKey & { userId: string; now: Date },
+  input: FilmKey & { userId: string },
 ): Promise<PredictionBoard | null> {
   const [film] = await db
     .select({
@@ -278,7 +347,8 @@ export async function getPredictionBoard(
     .limit(1);
   if (!film) return null;
 
-  const [participants, rows, finishVote] = await Promise.all([
+  const own = and(eq(predictions.roomId, input.roomId), eq(predictions.movieId, input.movieId));
+  const [participants, counts, rows, finishVote] = await Promise.all([
     film.spinId
       ? db
           .select({ userId: spinVotes.userId, pseudo: profiles.pseudo })
@@ -287,6 +357,12 @@ export async function getPredictionBoard(
           .where(eq(spinVotes.spinId, film.spinId))
           .orderBy(asc(profiles.pseudo))
       : Promise.resolve([]),
+    db
+      .select({ userId: predictions.userId, total: count() })
+      .from(predictions)
+      .where(own)
+      .groupBy(predictions.userId),
+    // Hidden until the end: while the film is on, only the member's own text is read.
     db
       .select({
         id: predictions.id,
@@ -297,7 +373,7 @@ export async function getPredictionBoard(
       })
       .from(predictions)
       .innerJoin(profiles, eq(profiles.id, predictions.userId))
-      .where(and(eq(predictions.roomId, input.roomId), eq(predictions.movieId, input.movieId)))
+      .where(film.finishedAt ? own : and(own, eq(predictions.userId, input.userId)))
       .orderBy(asc(profiles.pseudo), asc(predictions.createdAt)),
     film.finishedAt ? Promise.resolve(null) : currentFinishVote(db, input),
   ]);
@@ -309,10 +385,9 @@ export async function getPredictionBoard(
     isParticipant: participants.some((p) => p.userId === input.userId),
     participants: participants.map((p) => ({
       ...p,
-      predictionCount: rows.filter((row) => row.userId === p.userId).length,
+      predictionCount: counts.find((c) => c.userId === p.userId)?.total ?? 0,
     })),
     myPredictions: rows.filter((row) => row.userId === input.userId).map(toPrediction),
-    // Hidden until the end: nobody copies, nobody spoils.
     revealed: film.finishedAt ? groupByAuthor(rows) : [],
     finishVote,
   };

@@ -23,8 +23,8 @@ export async function requireWatchedMovie(roomId: string, movieId: string): Prom
   return detail;
 }
 
-/** The most recent watched film the current user has not rated yet. */
+/** The most recent finished film the current user has not rated yet. */
 export async function getNextToRate(roomId: string): Promise<WatchedMovie | null> {
   const { movies } = await getWatchedMovies(roomId);
-  return movies.find((movie) => !movie.ratedByMe) ?? null;
+  return movies.find((movie) => movie.finishedAt !== null && !movie.ratedByMe) ?? null;
 }
