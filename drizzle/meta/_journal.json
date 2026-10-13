@@ -50,6 +50,13 @@
       "when": 1791917683438,
       "tag": "0006_predictions_and_finish_votes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791918857412,
+      "tag": "0007_prediction_votes",
+      "breakpoints": true
     }
   ]
 }

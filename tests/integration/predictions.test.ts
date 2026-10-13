@@ -55,7 +55,7 @@ async function watch(movieId: number, voterIds: string[]) {
 }
 
 const predict = (userId: string, content: string, movieId = FILM) => addPrediction(db, { roomId, movieId, userId, content });
-const board = (userId: string) => getPredictionBoard(db, { roomId, movieId: FILM, userId });
+const board = (userId: string) => getPredictionBoard(db, { roomId, movieId: FILM, userId, now: NOW });
 const propose = (userId: string, now = NOW) => proposeFinish(db, { roomId, movieId: FILM, userId, now });
 const vote = (userId: string, proposalId: string, value: "yes" | "no", now = NOW) =>
   castFinishVote(db, { roomId, proposalId, userId, vote: value, now });
@@ -192,10 +192,10 @@ describe("Film terminé ?", () => {
     await vote(sarah, started.proposalId, "yes");
 
     await settleExpiredFinishVotes(db, { roomId, now: minutesLater(19) });
-    expect((await getPredictionBoard(db, { roomId, movieId: 2, userId: will }))?.finishedAt).toBeNull();
+    expect((await getPredictionBoard(db, { roomId, movieId: 2, userId: will, now: NOW }))?.finishedAt).toBeNull();
 
     await settleExpiredFinishVotes(db, { roomId, now: minutesLater(20) });
-    expect((await getPredictionBoard(db, { roomId, movieId: 2, userId: will }))?.finishedAt).toEqual(minutesLater(20));
+    expect((await getPredictionBoard(db, { roomId, movieId: 2, userId: will, now: NOW }))?.finishedAt).toEqual(minutesLater(20));
     expect(await vote(momo, started.proposalId, "no", minutesLater(21))).toEqual({ status: "closed" });
   });
 
@@ -207,7 +207,7 @@ describe("Film terminé ?", () => {
     await vote(momo, started.proposalId, "no");
 
     await settleExpiredFinishVotes(db, { roomId, now: minutesLater(30) });
-    expect((await getPredictionBoard(db, { roomId, movieId: 2, userId: will }))).toMatchObject({
+    expect((await getPredictionBoard(db, { roomId, movieId: 2, userId: will, now: NOW }))).toMatchObject({
       finishedAt: null,
       finishVote: null,
     });
