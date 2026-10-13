@@ -11,16 +11,20 @@ import {
   listPendingFinishVotes,
   settleExpiredFinishVotes,
 } from "./services/prediction-service";
-import type { FilmInProgress, PendingFinishVote, PredictionBoard } from "./types";
+import { findFilmToJudge, settleExpiredPredictions } from "./services/judging-service";
+import type { FilmInProgress, FilmToJudge, PendingFinishVote, PredictionBoard } from "./types";
 
 /**
  * Votes expire, so these reads depend on the current time (always at request
  * time) and first settle the votes past their delay: the room sees a film
  * end on time without anyone clicking again.
  */
-async function settleExpired(roomId: string): Promise<void> {
+async function settleExpired(roomId: string): Promise<Date> {
   await connection();
-  await settleExpiredFinishVotes(getDb(), { roomId, now: new Date() });
+  const now = new Date();
+  await settleExpiredFinishVotes(getDb(), { roomId, now });
+  await settleExpiredPredictions(getDb(), { roomId, now });
+  return now;
 }
 
 /** The film's predictions as the current member may see them, or a 404. */
@@ -28,8 +32,8 @@ export async function requirePredictionBoard(roomId: string, movieId: string): P
   const parsed = movieIdSchema.safeParse(movieId);
   if (!parsed.success) notFound();
   const [room, user] = await Promise.all([requireRoomMember(roomId), getCurrentUser()]);
-  await settleExpired(room.id);
-  const board = await getPredictionBoard(getDb(), { roomId: room.id, movieId: parsed.data, userId: user.id });
+  const now = await settleExpired(room.id);
+  const board = await getPredictionBoard(getDb(), { roomId: room.id, movieId: parsed.data, userId: user.id, now });
   if (!board) notFound();
   return board;
 }
@@ -45,4 +49,11 @@ export async function getFilmInProgress(roomId: string): Promise<FilmInProgress 
   const room = await requireRoomMember(roomId);
   await settleExpired(room.id);
   return findFilmInProgress(getDb(), room.id);
+}
+
+/** The latest finished film whose predictions wait for the current member's votes. */
+export async function getFilmToJudge(roomId: string): Promise<FilmToJudge | null> {
+  const [room, user] = await Promise.all([requireRoomMember(roomId), getCurrentUser()]);
+  const now = await settleExpired(room.id);
+  return findFilmToJudge(getDb(), { roomId: room.id, userId: user.id, now });
 }

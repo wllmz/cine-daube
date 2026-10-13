@@ -6,7 +6,8 @@ import { getCurrentUser } from "@/features/auth/server";
 import { movieIdSchema } from "@/features/ratings/schemas";
 import { requireRoomMember } from "@/features/rooms/server";
 import { MAX_PREDICTIONS } from "../rules";
-import { finishVoteSchema, predictionContentSchema, predictionIdSchema, proposalIdSchema } from "../schemas";
+import { voteValueSchema, predictionContentSchema, predictionIdSchema, proposalIdSchema } from "../schemas";
+import { castPredictionVote } from "../services/judging-service";
 import { addPrediction, castFinishVote, deletePrediction, proposeFinish } from "../services/prediction-service";
 import type { PredictionActionState } from "../types";
 
@@ -94,7 +95,7 @@ export async function castFinishVoteAction(
 ): Promise<PredictionActionState> {
   const { room, user } = await memberContext(roomId);
   const parsedProposal = proposalIdSchema.safeParse(proposalId);
-  const parsedVote = finishVoteSchema.safeParse(vote);
+  const parsedVote = voteValueSchema.safeParse(vote);
   if (!parsedProposal.success || !parsedVote.success) return { error: "Vote invalide." };
 
   const result = await castFinishVote(getDb(), {
@@ -107,4 +108,32 @@ export async function castFinishVoteAction(
   if (result.status === "closed") return { error: CLOSED };
   if (result.status === "not_voter") return { error: NOT_PARTICIPANT };
   return {};
+}
+
+const PREDICTION_VOTE_ERRORS = {
+  not_found: "Prédiction introuvable.",
+  not_finished: "Attends la fin du film pour juger les prédictions.",
+  closed: "Les votes sur cette prédiction sont terminés.",
+  own_prediction: "Tu ne peux pas juger tes propres prédictions.",
+  not_voter: NOT_PARTICIPANT,
+} as const;
+
+export async function castPredictionVoteAction(
+  roomId: string,
+  predictionId: string,
+  vote: string,
+): Promise<PredictionActionState> {
+  const { room, user } = await memberContext(roomId);
+  const parsedPrediction = predictionIdSchema.safeParse(predictionId);
+  const parsedVote = voteValueSchema.safeParse(vote);
+  if (!parsedPrediction.success || !parsedVote.success) return { error: "Vote invalide." };
+
+  const result = await castPredictionVote(getDb(), {
+    roomId: room.id,
+    predictionId: parsedPrediction.data,
+    userId: user.id,
+    vote: parsedVote.data,
+  });
+  refresh();
+  return result.status === "voted" ? {} : { error: PREDICTION_VOTE_ERRORS[result.status] };
 }

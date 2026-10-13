@@ -8,4 +8,4 @@ export const predictionContentSchema = z
 
 export const predictionIdSchema = z.uuid();
 export const proposalIdSchema = z.uuid();
-export const finishVoteSchema = z.enum(["yes", "no"]);
+export const voteValueSchema = z.enum(["yes", "no"]);
