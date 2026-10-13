@@ -40,7 +40,7 @@ beforeEach(async () => {
   sarah = await createUser(pglite, "Sarah");
   outsider = await createUser(pglite, "Intrus");
   ({ id: roomId } = await createRoom(db, { userId: will, name: "Les Nanardeurs", generateCode: () => "AAAAAAAA" }));
-  await pglite.query("insert into movies (tmdb_id, title, tmdb_rating, tmdb_vote_count) values (1, 'Film', 3, 100)");
+  await pglite.query("insert into movies (tmdb_id, title, tmdb_rating, tmdb_vote_count) values (1, 'Film', 6, 100)");
   await pglite.query("insert into movie_providers (movie_id, provider) values (1, 'netflix')");
   await pglite.exec("delete from realtime.sent");
 });

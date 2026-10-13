@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, exists, gt, notExists, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gt, gte, notExists, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import { isUniqueViolation } from "@/db/errors";
 import { finishFilmsInProgress } from "@/features/predictions/services/prediction-service";
@@ -16,9 +16,13 @@ import type {
 // A film the room just rejected should not come straight back.
 const REJECTED_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
+// Below this TMDB score a film is too painful to sit through, even for us.
+const MIN_TMDB_RATING = 5.7;
+
 /**
  * Draws a random film still in the room's pool: available on a platform,
- * never watched or marked "déjà vu" by the room, not rejected recently.
+ * rated at least MIN_TMDB_RATING on TMDB, never watched or marked "déjà vu"
+ * by the room, not rejected recently.
  */
 async function pickMovie(db: Database, roomId: string, now: Date): Promise<number | null> {
   const available = db
@@ -45,7 +49,14 @@ async function pickMovie(db: Database, roomId: string, now: Date): Promise<numbe
   const [movie] = await db
     .select({ tmdbId: movies.tmdbId })
     .from(movies)
-    .where(and(exists(available), notExists(alreadyInRoom), notExists(recentlyRejected)))
+    .where(
+      and(
+        gte(movies.tmdbRating, MIN_TMDB_RATING),
+        exists(available),
+        notExists(alreadyInRoom),
+        notExists(recentlyRejected),
+      ),
+    )
     .orderBy(sql`random()`)
     .limit(1);
   return movie?.tmdbId ?? null;

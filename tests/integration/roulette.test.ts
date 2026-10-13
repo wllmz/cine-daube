@@ -24,7 +24,7 @@ let julie: string;
 async function seedMovies(ids: number[]) {
   for (const id of ids) {
     await pglite.query(
-      "insert into movies (tmdb_id, title, tmdb_rating, tmdb_vote_count, release_year, runtime_minutes) values ($1, $2, 3.1, 100, 2021, 94)",
+      "insert into movies (tmdb_id, title, tmdb_rating, tmdb_vote_count, release_year, runtime_minutes) values ($1, $2, 6.1, 100, 2021, 94)",
       [id, `Film ${id}`],
     );
     await pglite.query("insert into movie_providers (movie_id, provider) values ($1, 'netflix')", [id]);
@@ -83,6 +83,13 @@ describe("startSpin", () => {
     await pglite.query(
       `insert into room_movies (room_id, movie_id, status) values ('${roomId}', 1, 'watched'), ('${roomId}', 2, 'seen_before')`,
     );
+    await startedSpin([will]);
+    expect((await getLatestSpin(db, roomId))?.movie.tmdbId).toBe(3);
+  });
+
+  it("never draws a film rated below 5.7 on TMDB", async () => {
+    await pglite.query("update movies set tmdb_rating = 5.6 where tmdb_id in (1, 2)");
+    await pglite.query("update movies set tmdb_rating = 5.7 where tmdb_id = 3");
     await startedSpin([will]);
     expect((await getLatestSpin(db, roomId))?.movie.tmdbId).toBe(3);
   });
