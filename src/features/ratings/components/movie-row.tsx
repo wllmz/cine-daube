@@ -5,7 +5,15 @@ import { formatScore, formatShortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { WatchedMovie } from "../types";
 
-export function MovieRow({ roomId, movie, rank }: { roomId: string; movie: WatchedMovie; rank: number }) {
+type MovieRowProps = {
+  roomId: string;
+  movie: WatchedMovie;
+  rank: number;
+  /** The viewer's points from predictions on this film. */
+  points?: number;
+};
+
+export function MovieRow({ roomId, movie, rank, points = 0 }: MovieRowProps) {
   const average = movie.summary.average;
   const provider = movie.providers[0];
 
@@ -32,6 +40,7 @@ export function MovieRow({ roomId, movie, rank }: { roomId: string; movie: Watch
           ) : (
             !movie.ratedByMe && <span className="font-semibold text-accent-strong">· à noter</span>
           )}
+          {points > 0 && <span className="font-semibold text-success">· +{points} pt{points > 1 ? "s" : ""}</span>}
         </span>
         <span className="h-1 overflow-hidden rounded-full bg-[#f0f0ee]">
           <span
