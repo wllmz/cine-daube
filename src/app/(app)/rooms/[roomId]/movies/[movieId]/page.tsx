@@ -5,7 +5,10 @@ import { Suspense } from "react";
 import { BackLink } from "@/components/ui/back-link";
 import { buttonClassName } from "@/components/ui/button";
 import { Tomy } from "@/components/ui/tomy";
+import { getCurrentUser } from "@/features/auth/server";
 import { PROVIDER_LABELS, tmdbPosterUrl } from "@/features/catalog";
+import { PredictionSession, RevealedPredictions } from "@/features/predictions";
+import { requirePredictionBoard } from "@/features/predictions/server";
 import { MemberRatings, verdict } from "@/features/ratings";
 import { requireWatchedMovie } from "@/features/ratings/server";
 import { formatScore, formatShortDate } from "@/lib/format";
@@ -26,7 +29,11 @@ function ScoreBar({ label, value }: { label: string; value: number | null }) {
 
 async function MovieDetailView({ params }: { params: Promise<{ roomId: string; movieId: string }> }) {
   const { roomId, movieId } = await params;
-  const movie = await requireWatchedMovie(roomId, movieId);
+  const [movie, board, user] = await Promise.all([
+    requireWatchedMovie(roomId, movieId),
+    requirePredictionBoard(roomId, movieId),
+    getCurrentUser(),
+  ]);
   const { summary } = movie;
   const platforms = movie.providers.map((provider) => PROVIDER_LABELS[provider]).join(", ");
   const meta = [movie.releaseYear, platforms, `vu le ${formatShortDate(movie.watchedAt)}`].filter(Boolean).join(" · ");
@@ -50,6 +57,8 @@ async function MovieDetailView({ params }: { params: Promise<{ roomId: string; m
           {movie.overview && <p className="line-clamp-3 text-[13px] leading-relaxed text-ink-soft">{movie.overview}</p>}
         </div>
       </section>
+
+      {!board.finishedAt && <PredictionSession roomId={roomId} board={board} currentUserId={user.id} />}
 
       <section className="flex flex-col gap-3.5 rounded-[20px] border border-line bg-surface p-[18px] shadow-card">
         {summary.average === null ? (
@@ -86,11 +95,15 @@ async function MovieDetailView({ params }: { params: Promise<{ roomId: string; m
         )}
       </section>
 
-      <Link href={`/rooms/${roomId}/movies/${movie.tmdbId}/rate`} className={buttonClassName(movie.myScores ? "secondary" : "primary")}>
-        {movie.myScores ? "Modifier ma note" : "Noter ce film"}
-      </Link>
+      {board.finishedAt && (
+        <Link href={`/rooms/${roomId}/movies/${movie.tmdbId}/rate`} className={buttonClassName(movie.myScores ? "secondary" : "primary")}>
+          {movie.myScores ? "Modifier ma note" : "Noter ce film"}
+        </Link>
+      )}
 
       <MemberRatings ratings={movie.ratings} />
+
+      {board.finishedAt && <RevealedPredictions authors={board.revealed} />}
     </>
   );
 }

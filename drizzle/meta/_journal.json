@@ -43,6 +43,13 @@
       "when": 1791641351204,
       "tag": "0005_ratings_notify_room",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791917683438,
+      "tag": "0006_predictions_and_finish_votes",
+      "breakpoints": true
     }
   ]
 }

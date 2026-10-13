@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { BackLink } from "@/components/ui/back-link";
 import { PROVIDER_LABELS, tmdbPosterUrl } from "@/features/catalog";
@@ -11,6 +12,8 @@ export const metadata: Metadata = { title: "Noter · Ciné Daube" };
 async function Rate({ params }: { params: Promise<{ roomId: string; movieId: string }> }) {
   const { roomId, movieId } = await params;
   const movie = await requireWatchedMovie(roomId, movieId);
+  // Rated once the room has finished it.
+  if (movie.finishedAt === null) redirect(`/rooms/${roomId}/movies/${movie.tmdbId}`);
   const meta = [movie.releaseYear, movie.providers.map((p) => PROVIDER_LABELS[p]).join(", ")].filter(Boolean).join(" · ");
 
   return (

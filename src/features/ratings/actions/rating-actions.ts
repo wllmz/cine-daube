@@ -32,7 +32,13 @@ export async function rateMovieAction(
   if (!scores.success) return { error: "Les notes vont de 0 à 10." };
 
   try {
-    await saveRating(getDb(), { roomId: room.id, movieId: parsedMovie.data, userId: user.id, scores: scores.data });
+    const result = await saveRating(getDb(), {
+      roomId: room.id,
+      movieId: parsedMovie.data,
+      userId: user.id,
+      scores: scores.data,
+    });
+    if (result === "not_finished") return { error: "Attends la fin du film pour le noter." };
   } catch (error) {
     // The database refuses films the room did not watch; anything else is a real failure.
     if (!isForeignKeyViolation(error, "ratings_room_movie_fk")) throw error;

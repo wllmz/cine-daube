@@ -27,6 +27,7 @@ const watchedColumns = {
   runtimeMinutes: movies.runtimeMinutes,
   posterPath: movies.posterPath,
   watchedAt: roomMovies.createdAt,
+  finishedAt: roomMovies.finishedAt,
 };
 
 /** Films the room watched (accepted at the roulette), most recent first, with their scores. */
@@ -157,12 +158,22 @@ export async function getMovieDetail(
 
 /**
  * Creates or updates a member's rating. The database only accepts it for a
- * member of the room and a film the room watched.
+ * member of the room and a film the room watched; a film still on is rated
+ * once it is finished.
  */
 export async function saveRating(
   db: Database,
   input: { roomId: string; movieId: number; userId: string; scores: Scores },
-): Promise<void> {
+): Promise<"saved" | "not_finished"> {
+  const [film] = await db
+    .select({ finishedAt: roomMovies.finishedAt })
+    .from(roomMovies)
+    .where(
+      and(eq(roomMovies.roomId, input.roomId), eq(roomMovies.movieId, input.movieId), eq(roomMovies.status, "watched")),
+    );
+  // Unknown or "déjà vu" films are left to the foreign key.
+  if (film && film.finishedAt === null) return "not_finished";
+
   const values = {
     roomId: input.roomId,
     movieId: input.movieId,
@@ -178,4 +189,5 @@ export async function saveRating(
       target: [ratings.roomId, ratings.movieId, ratings.userId],
       set: { humour: values.humour, scenario: values.scenario, acting: values.acting, updatedAt: new Date() },
     });
+  return "saved";
 }

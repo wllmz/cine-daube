@@ -27,7 +27,11 @@ export function MovieRow({ roomId, movie, rank }: { roomId: string; movie: Watch
             <span className="rounded-full bg-chip px-2 py-0.5 text-[11px] font-bold text-ink">{PROVIDER_LABELS[provider]}</span>
           )}
           vu le {formatShortDate(movie.watchedAt)}
-          {!movie.ratedByMe && <span className="font-semibold text-accent-strong">· à noter</span>}
+          {movie.finishedAt === null ? (
+            <span className="font-semibold text-accent-strong">· en cours</span>
+          ) : (
+            !movie.ratedByMe && <span className="font-semibold text-accent-strong">· à noter</span>
+          )}
         </span>
         <span className="h-1 overflow-hidden rounded-full bg-[#f0f0ee]">
           <span

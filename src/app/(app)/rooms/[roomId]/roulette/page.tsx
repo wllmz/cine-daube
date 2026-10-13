@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { BackLink } from "@/components/ui/back-link";
 import { buttonClassName } from "@/components/ui/button";
 import { PROVIDER_LABELS } from "@/features/catalog";
+import { getFilmInProgress } from "@/features/predictions/server";
 import {
   AutoRefresh,
   LaunchForm,
@@ -36,10 +37,11 @@ function whereToWatch(spin: CurrentSpin): string {
 
 async function Roulette({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  return <RouletteScreen {...await getRouletteState(roomId)} />;
+  const [state, inProgress] = await Promise.all([getRouletteState(roomId), getFilmInProgress(roomId)]);
+  return <RouletteScreen {...state} acceptedIsOn={inProgress?.tmdbId === state.spin?.movie.tmdbId} />;
 }
 
-function RouletteScreen({ room, members, currentUserId, spin }: RouletteState) {
+function RouletteScreen({ room, members, currentUserId, spin, acceptedIsOn }: RouletteState & { acceptedIsOn: boolean }) {
 
   const header = (
     <header className="flex items-center gap-1">
@@ -90,8 +92,8 @@ function RouletteScreen({ room, members, currentUserId, spin }: RouletteState) {
               </span>
             </p>
             <MovieCard movie={spin.movie} />
-            <Link href={`/rooms/${room.id}/movies/${spin.movie.tmdbId}/rate`} className={buttonClassName("primary")}>
-              Film terminé ? On le note
+            <Link href={`/rooms/${room.id}/movies/${spin.movie.tmdbId}`} className={buttonClassName("primary")}>
+              {acceptedIsOn ? "Faire mes prédictions" : "Film terminé : voir les prédictions et noter"}
             </Link>
             {/* The accepted film counts as watched: this starts the next movie night. */}
             <details className="rounded-[14px] border border-line p-3.5">

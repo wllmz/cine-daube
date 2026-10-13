@@ -25,12 +25,11 @@ async function watch(movieId: number, title: string, at: string, status = "watch
     [movieId, title],
   );
   await pglite.query("insert into movie_providers (movie_id, provider) values ($1, 'canal_plus') on conflict do nothing", [movieId]);
-  await pglite.query("insert into room_movies (room_id, movie_id, status, created_at) values ($1, $2, $3, $4)", [
-    roomId,
-    movieId,
-    status,
-    at,
-  ]);
+  // Watched films are finished (ratable); "déjà vu" ones never are.
+  await pglite.query(
+    "insert into room_movies (room_id, movie_id, status, created_at, finished_at) values ($1, $2, $3, $4, $5)",
+    [roomId, movieId, status, at, status === "watched" ? at : null],
+  );
 }
 
 const rate = (userId: string, movieId: number, humour: number, scenario: number, acting: number | null = null) =>
@@ -55,6 +54,13 @@ describe("saveRating", () => {
     const detail = await getMovieDetail(db, { roomId, movieId: 1, userId: will });
     expect(detail?.myScores).toEqual({ humour: 4, scenario: 3, acting: null });
     expect(detail?.summary.count).toBe(1);
+  });
+
+  it("waits for the end of a film still on", async () => {
+    await watch(1, "Mariage à la plancha", "2026-09-21T20:00:00Z");
+    await pglite.query("update room_movies set finished_at = null where movie_id = 1");
+    expect(await rate(will, 1, 5, 5)).toBe("not_finished");
+    expect((await getMovieDetail(db, { roomId, movieId: 1, userId: will }))?.summary.count).toBe(0);
   });
 
   it("refuses ratings on a film the room only marked as already seen", async () => {
