@@ -2,6 +2,7 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "@/db";
+import { isCheckViolation, isForeignKeyViolation } from "@/db/errors";
 import {
   computeRoomStats,
   getMovieDetail,
@@ -58,14 +59,18 @@ describe("saveRating", () => {
 
   it("refuses ratings on a film the room only marked as already seen", async () => {
     await watch(2, "Déjà vu", "2026-09-21T20:00:00Z", "seen_before");
-    await expect(rate(will, 2, 5, 5)).rejects.toThrow();
+    await expect(rate(will, 2, 5, 5)).rejects.toSatisfy((error) =>
+      isForeignKeyViolation(error, "ratings_room_movie_fk"),
+    );
   });
 
   it("refuses ratings from outside the room and out of range", async () => {
     await watch(1, "Mariage à la plancha", "2026-09-21T20:00:00Z");
     const outsider = await createUser(pglite, "Intrus");
-    await expect(rate(outsider, 1, 5, 5)).rejects.toThrow();
-    await expect(rate(will, 1, 11, 5)).rejects.toThrow();
+    await expect(rate(outsider, 1, 5, 5)).rejects.toSatisfy((error) =>
+      isForeignKeyViolation(error, "ratings_member_fk"),
+    );
+    await expect(rate(will, 1, 11, 5)).rejects.toSatisfy((error) => isCheckViolation(error, "ratings_humour_range"));
   });
 });
 

@@ -63,6 +63,8 @@ describe("rateMovieAction", () => {
     ["a missing score", { humour: "3" }],
     ["an empty score (not a zero)", { humour: "", scenario: "2" }],
     ["an empty bonus when ticked", { humour: "3", scenario: "2", actingEnabled: "on", acting: "" }],
+    ["a missing bonus when ticked", { humour: "3", scenario: "2", actingEnabled: "on" }],
+    ["a padded score", { humour: " 4", scenario: "2" }],
     ["a decimal score", { humour: "3.5", scenario: "2" }],
     ["an exponent", { humour: "1e1", scenario: "2" }],
   ])("rejects %s", async (_label, fields) => {
@@ -83,9 +85,15 @@ describe("rateMovieAction", () => {
   });
 
   it("explains a film the room did not watch", async () => {
-    saveRating.mockRejectedValue(new Error("violates foreign key"));
+    saveRating.mockRejectedValue({ code: "23503", constraint_name: "ratings_room_movie_fk" });
     expect((await rateMovieAction(ROOM_ID, "42", {}, form({ humour: "3", scenario: "2" }))).error).toContain(
       "Impossible d'enregistrer",
     );
+  });
+
+  it("lets other database failures surface", async () => {
+    const outage = new Error("connection terminated");
+    saveRating.mockRejectedValue(outage);
+    await expect(rateMovieAction(ROOM_ID, "42", {}, form({ humour: "3", scenario: "2" }))).rejects.toBe(outage);
   });
 });

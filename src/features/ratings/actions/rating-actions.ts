@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
+import { isForeignKeyViolation } from "@/db/errors";
 import { getCurrentUser } from "@/features/auth/server";
 import { requireRoomMember } from "@/features/rooms/server";
 import { movieIdSchema, ratingFormSchema } from "../schemas";
@@ -33,8 +34,8 @@ export async function rateMovieAction(
   try {
     await saveRating(getDb(), { roomId: room.id, movieId: parsedMovie.data, userId: user.id, scores: scores.data });
   } catch (error) {
-    // The database refuses films the room did not watch.
-    console.error("saveRating failed", error);
+    // The database refuses films the room did not watch; anything else is a real failure.
+    if (!isForeignKeyViolation(error, "ratings_room_movie_fk")) throw error;
     return { error: "Impossible d'enregistrer ta note pour ce film." };
   }
   redirect(`/rooms/${room.id}/movies/${parsedMovie.data}`);
